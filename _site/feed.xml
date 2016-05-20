@@ -6,8 +6,8 @@
 </description>
     <link>http://luckywhu.github.io/</link>
     <atom:link href="http://luckywhu.github.io/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sat, 21 May 2016 02:06:50 +0800</pubDate>
-    <lastBuildDate>Sat, 21 May 2016 02:06:50 +0800</lastBuildDate>
+    <pubDate>Sat, 21 May 2016 02:17:07 +0800</pubDate>
+    <lastBuildDate>Sat, 21 May 2016 02:17:07 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
     
       <item>
@@ -39,9 +39,8 @@
       </item>
     
       <item>
-        <title>First Post</title>
-        <description>
-&lt;h1 id=&quot;blog&quot;&gt;王剑英的Blog&lt;/h1&gt;
+        <title>第一篇Jekyll博客</title>
+        <description>&lt;h1 id=&quot;blog&quot;&gt;王剑英的Blog&lt;/h1&gt;
 
 &lt;h2 id=&quot;section&quot;&gt;（1）第一段&lt;/h2&gt;
 
@@ -49,10 +48,12 @@
 
 &lt;h2 id=&quot;section-2&quot;&gt;（3） 第三段&lt;/h2&gt;
 </description>
-        <pubDate>Sat, 21 May 2016 00:00:00 +0800</pubDate>
-        <link>http://luckywhu.github.io/2016/05/21/first-post.html</link>
-        <guid isPermaLink="true">http://luckywhu.github.io/2016/05/21/first-post.html</guid>
+        <pubDate>Sat, 21 May 2016 01:09:37 +0800</pubDate>
+        <link>http://luckywhu.github.io/personal/2016/05/21/first-post.html</link>
+        <guid isPermaLink="true">http://luckywhu.github.io/personal/2016/05/21/first-post.html</guid>
         
+        
+        <category>personal</category>
         
       </item>
     
