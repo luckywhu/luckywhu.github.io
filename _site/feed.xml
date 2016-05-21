@@ -6,12 +6,12 @@
 </description>
     <link>http://luckywhu.github.io/</link>
     <atom:link href="http://luckywhu.github.io/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sat, 21 May 2016 02:45:32 +0800</pubDate>
-    <lastBuildDate>Sat, 21 May 2016 02:45:32 +0800</lastBuildDate>
+    <pubDate>Sat, 21 May 2016 12:18:15 +0800</pubDate>
+    <lastBuildDate>Sat, 21 May 2016 12:18:15 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
     
       <item>
-        <title>Welcome to Jekyll!</title>
+        <title>Jekyll Blog Sample!</title>
         <description>&lt;p&gt;You’ll find this post in your &lt;code class=&quot;highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run &lt;code class=&quot;highlighter-rouge&quot;&gt;jekyll serve&lt;/code&gt;, which launches a web server and auto-regenerates your site when a file is updated.&lt;/p&gt;
 
 &lt;p&gt;To add new posts, simply add a file in the &lt;code class=&quot;highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory that follows the convention &lt;code class=&quot;highlighter-rouge&quot;&gt;YYYY-MM-DD-name-of-post.ext&lt;/code&gt; and includes the necessary front matter. Take a look at the source for this post to get an idea about how it works.&lt;/p&gt;
@@ -28,32 +28,527 @@
 
 </description>
         <pubDate>Sat, 21 May 2016 01:09:37 +0800</pubDate>
-        <link>http://luckywhu.github.io/jekyll/update/2016/05/21/welcome-to-jekyll.html</link>
-        <guid isPermaLink="true">http://luckywhu.github.io/jekyll/update/2016/05/21/welcome-to-jekyll.html</guid>
+        <link>http://luckywhu.github.io/jekyll/sample/2016/05/21/welcome-to-jekyll.html</link>
+        <guid isPermaLink="true">http://luckywhu.github.io/jekyll/sample/2016/05/21/welcome-to-jekyll.html</guid>
         
         
         <category>jekyll</category>
         
-        <category>update</category>
+        <category>sample</category>
         
       </item>
     
       <item>
-        <title>第一篇Jekyll博客</title>
-        <description>&lt;h1 id=&quot;blog&quot;&gt;王剑英的Blog&lt;/h1&gt;
+        <title>leveldb 编译测试</title>
+        <description>&lt;h2 id=&quot;section&quot;&gt;编译安装&lt;/h2&gt;
+&lt;p&gt;跨平台特性比较好，
+mac下和linux下都直接编译通过，不做任何调整。&lt;/p&gt;
 
-&lt;h2 id=&quot;section&quot;&gt;（1）第一段&lt;/h2&gt;
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;直接编译 make&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;编译并执行单元测试程序  make check，该命令会编译并执行db/XXX_test.cc产出的程序，包含一些单元测试和性能测试工具。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
 
-&lt;h2 id=&quot;section-1&quot;&gt;（2）第二段&lt;/h2&gt;
+&lt;h2 id=&quot;dbbench&quot;&gt;性能测试工具db_bench&lt;/h2&gt;
+&lt;p&gt;db/db_bench.cc 编译后产出物为db_bench，可以用来做一些基本的性能测试。
+不带参数运行输出如下，主要包含两个指标，单次请求的响应时间，以及最终反映出来的IO速率。&lt;/p&gt;
 
-&lt;h2 id=&quot;section-2&quot;&gt;（3） 第三段&lt;/h2&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[leveldb]$ ./db_bench 
+LevelDB:    version 1.18
+CPU:        8 * Intel(R) Xeon(R) CPU           E5620  @ 2.40GHz
+CPUCache:   12288 KB
+Keys:       16 bytes each
+Values:     100 bytes each (50 bytes after compression)
+Entries:    1000000
+RawSize:    110.6 MB (estimated)
+FileSize:   62.9 MB (estimated)
+WARNING: Snappy compression is not enabled
+------------------------------------------------
+fillseq      :       2.843 micros/op;   38.9 MB/s     
+fillsync     :    8688.742 micros/op;    0.0 MB/s (1000 ops)
+fillrandom   :       4.849 micros/op;   22.8 MB/s     
+overwrite    :       5.963 micros/op;   18.6 MB/s     
+readrandom   :       5.756 micros/op; (1000000 of 1000000 found)
+readrandom   :       4.835 micros/op; (1000000 of 1000000 found)
+readseq      :       0.249 micros/op;  444.0 MB/s    
+readreverse  :       0.545 micros/op;  202.9 MB/s    
+compact      :  803955.000 micros/op;
+readrandom   :       3.283 micros/op; (1000000 of 1000000 found)
+readseq      :       0.214 micros/op;  516.2 MB/s    
+readreverse  :       0.472 micros/op;  234.2 MB/s    
+fill100K     :    1430.834 micros/op;   66.7 MB/s (1000 ops)
+crc32c       :       5.043 micros/op;  774.6 MB/s (4K per op)
+snappycomp   :    5425.000 micros/op; (snappy failure)
+snappyuncomp :    4940.000 micros/op; (snappy failure)
+acquireload  :       0.847 micros/op; (each op is 1000 loads)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;从输出看，测试类型包含了顺序写入，随机写入，顺序读取，随机读取等，基本包含了使用中需要关注的所有场景。
+由于没有–help参数，所以参数指定需要查看源码获得，修改db_bench.cc，添加一个usage函数，输出帮助文档。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench     --db=db_dir          
+               --benchmarks=        
+               --num=               
+               --threads=           
+               --value_size=        
+               --use_existing_db=   
+               --compression_ratio= 
+               --histogram=         
+               --reads=             
+               --cache_size=        
+               --bloom_bits=        
+               --open_files= 
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;参数的作用如下&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;参数&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;解释&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;默认值&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–benchamarks&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;测试类型，读，写等&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;默认测试所有的suit&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–db&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;数据库目录&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;/tmp/leveldb_test_XXX&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–use_existing_db&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;使用已存在的数据库文件&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–num&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;记录行数&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;1000000&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–threads&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;测试线程数&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–reads&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;只读测试中读的次数&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–value_size&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;k,v中value的长度&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;默认是100&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–cache_size&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;LRU的cache大小&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;使用DB的默认值&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–bloom_bits&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;bloom过滤器bits数&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;使用DB默认值&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–open_files&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;打开文件数&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;默认1000&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–compression_ration&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;压缩率，默认snappy压缩&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;0.5&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;–write_buffer_size&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;写入缓冲区大小&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4MB&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;其中benchmarks可选值如下&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;测试名&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;测试场景&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;fillseq&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– write N values in sequential key order in async mode&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;fillrandom&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– write N values in random key order in async mode&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;overwrite&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– overwrite N values in random key order in async mode&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;fillsync&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– write N/100 values in random key order in sync mode&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;fill100K&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– write N/1000 100K values in random order in async mode&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;deleteseq&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– delete N keys in sequential order&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;deleterandom&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– delete N keys in random order&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;readseq&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– read N times sequentially&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;readreverse&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in reverse order&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;readrandom&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in random order&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;readmissing&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– read N missing keys in random order&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;readhot&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in random order from 1% section of DB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;seekrandom&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– N random seeks&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;open&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– cost of opening a DB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;crc32c&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– repeated crc32c of 4K of data&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;acquireload&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;– load N*1000 times&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;##基本测试
+比较感兴趣的是大数据量下的读写性能，因此测试了10亿条记录，value_size=300,数据集在280GB的场景。
+单线程顺序插入。对db_bench.cc稍作修改，以便同时输出OPS数据。
+服务器配置如下，虽然内存较大，但每次测试前均清空Cache&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;磁盘为单盘450GB的SSD，ext3文件系统，未做RAID。&lt;/li&gt;
+  &lt;li&gt;CPU为12核心E5620 CPUcache 12MB，&lt;/li&gt;
+  &lt;li&gt;服务器内存96GB&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;###A.写入测试,单线程fillseq  10亿条记录&lt;/p&gt;
+
+&lt;p&gt;单线程写入数据如下，10亿条记录，未压缩size在300GB左右。磁盘IO峰值观察到在60MB/S。
+最终体现出来的ops为11.5W/S，平均磁盘IO速度为35MB/S。数据目录下查看有8W多个3.5MB的小文件。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;测试命令
+./db_bench --benchmarks=fillseq --db=./db_150G --threads=1 --num=1000000000 --value_size=300 --histogram=1
+
+LevelDB:    version 1.18
+CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
+CPUCache:   15360 KB
+Keys:       16 bytes eachps                              
+Values:     300 bytes each (150 bytes after compression)
+Entries:    1000000000
+RawSize:    301361.1 MB (estimated)
+FileSize:   158309.9 MB (estimated)
+WARNING: Snappy compression is not enabled
+------------------------------------------------
+fillseq      :       8.632 micros/op;   34.9 MB/s      115848 op/s 
+Microseconds per op:
+Count: 1000000000  Average: 8.6323  StdDev: 537.24
+Min: 2.0000  Median: 3.8754  Max: 173675.0000
+------------------------------------------------------
+[       2,       3 ) 7967127   0.797%   0.797% 
+[       3,       4 ) 562070985  56.207%  57.004% ###########
+[       4,       5 ) 327928783  32.793%  89.797% #######
+[       5,       6 ) 13237323   1.324%  91.120% 
+[       6,       7 ) 4833270   0.483%  91.604% 
+[       7,       8 ) 38261699   3.826%  95.430% #
+[       8,       9 ) 30819496   3.082%  98.512% #
+[       9,      10 ) 8236891   0.824%  99.336% 
+[      10,      12 ) 4430341   0.443%  99.779% 
+[      12,      14 ) 1502560   0.150%  99.929% 
+[      14,      16 )  284303   0.028%  99.957% 
+[      16,      18 )   59401   0.006%  99.963% 
+[      18,      20 )   19740   0.002%  99.965% 
+[      20,      25 )   28390   0.003%  99.968% 
+[      25,      30 )    5991   0.001%  99.969% 
+[      30,      35 )    3064   0.000%  99.969% 
+[      35,      40 )    5397   0.001%  99.969% 
+[      40,      45 )    4382   0.000%  99.970% 
+[      45,      50 )    1839   0.000%  99.970% 
+[      50,      60 )    2834   0.000%  99.970% 
+[      60,      70 )    2356   0.000%  99.971% 
+[      70,      80 )    2084   0.000%  99.971% 
+[      80,      90 )    2184   0.000%  99.971% 
+[      90,     100 )    1767   0.000%  99.971% 
+[     100,     120 )    3712   0.000%  99.972% 
+[     120,     140 )    3354   0.000%  99.972% 
+[     140,     160 )    2916   0.000%  99.972% 
+[     160,     180 )    3173   0.000%  99.973% 
+[     180,     200 )    3152   0.000%  99.973% 
+[     200,     250 )    6253   0.001%  99.973% 
+[     250,     300 )    6175   0.001%  99.974% 
+[     300,     350 )    5913   0.001%  99.975% 
+[     350,     400 )    5066   0.001%  99.975% 
+[     400,     450 )    4726   0.000%  99.976% 
+[     450,     500 )    5911   0.001%  99.976% 
+[     500,     600 )   13321   0.001%  99.978% 
+[     600,     700 )   14018   0.001%  99.979% 
+[     700,     800 )   11826   0.001%  99.980% 
+[     800,     900 )    8459   0.001%  99.981% 
+[     900,    1000 )    5015   0.001%  99.982% 
+[    1000,    1200 )    5448   0.001%  99.982% 
+[    1200,    1400 )    4891   0.000%  99.983% 
+[    1400,    1600 )    3869   0.000%  99.983% 
+[    1600,    1800 )    4098   0.000%  99.983% 
+[    1800,    2000 )    3073   0.000%  99.984% 
+[    2000,    2500 )    6602   0.001%  99.984% 
+[    2500,    3000 )    3444   0.000%  99.985% 
+[    3000,    3500 )    3696   0.000%  99.985% 
+[    3500,    4000 )    4428   0.000%  99.985% 
+[    4000,    4500 )    4686   0.000%  99.986% 
+[    4500,    5000 )    3628   0.000%  99.986% 
+[    5000,    6000 )    6455   0.001%  99.987% 
+[    6000,    7000 )    9081   0.001%  99.988% 
+[    7000,    8000 )    6969   0.001%  99.989% 
+[    8000,    9000 )    8653   0.001%  99.989% 
+[    9000,   10000 )    7936   0.001%  99.990% 
+[   10000,   12000 )   13921   0.001%  99.992% 
+[   12000,   14000 )    6197   0.001%  99.992% 
+[   14000,   16000 )    4853   0.000%  99.993% 
+[   16000,   18000 )    2430   0.000%  99.993% 
+[   18000,   20000 )    2238   0.000%  99.993% 
+[   20000,   25000 )    5895   0.001%  99.994% 
+[   25000,   30000 )    3523   0.000%  99.994% 
+[   30000,   35000 )    4799   0.000%  99.995% 
+[   35000,   40000 )    7366   0.001%  99.995% 
+[   40000,   45000 )    4145   0.000%  99.996% 
+[   45000,   50000 )    3736   0.000%  99.996% 
+[   50000,   60000 )    8477   0.001%  99.997% 
+[   60000,   70000 )    6930   0.001%  99.998% 
+[   70000,   80000 )    6620   0.001%  99.998% 
+[   80000,   90000 )    5351   0.001%  99.999% 
+[   90000,  100000 )    6165   0.001%  99.999% 
+[  100000,  120000 )    5191   0.001% 100.000% 
+[  120000,  140000 )       7   0.000% 100.000% 
+[  160000,  180000 )       2   0.000% 100.000% 
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;###B，随机读取测试，randrandom 10W次
+测试前清空Cache.&lt;/p&gt;
+
+&lt;p&gt;随机读取10W次，测出性能在2000QPS左右，但磁盘IO维持在130MB/S,iostat中观察到测试分区IO使用率保持在100%。从已阅读的db_bench.cc中对leveldb的使用方式看，OPEN函数可以传进去一个LRUCache，以作缓存block用。对于一次随机读取，leveldb应该需要将该行记录所在的block读到内存，这意味着，如果没有命中cache，为了读300byte的记录，却要完成3.5MB的读IO。这种特性对顺序读取比较好，但对随机IO比较致命。&lt;/p&gt;
+
+&lt;p&gt;作为存储引擎，可优化方向&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;加入行级别缓存&lt;/li&gt;
+  &lt;li&gt;直接使用SSD随机读，不使用Buffered IO&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench --db=./data_150g --threads=1 --reads=100000 --num=1000000000 --value_size=300 --use_existing_db=1 --benchmarks=readrandom --histogram=1      
+LevelDB:    version 1.18
+CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
+CPUCache:   15360 KB
+Keys:       16 bytes each
+Values:     300 bytes each (150 bytes after compression)
+Entries:    1000000000
+RawSize:    301361.1 MB (estimated)
+FileSize:   158309.9 MB (estimated)
+WARNING: Snappy compression is not enabled
+------------------------------------------------
+readrandom   :     472.792 micros/op; (100000 of 1000000000 found)        2127 op/s 
+Microseconds per op:
+Count: 100000  Average: 472.7952  StdDev: 765.77
+Min: 2.0000  Median: 5.5320  Max: 11067.0000
+------------------------------------------------------
+[       2,       3 )     282   0.282%   0.282% 
+[       3,       4 )   16034  16.034%  16.316% ###
+[       4,       5 )   26818  26.818%  43.134% #####
+[       5,       6 )   12906  12.906%  56.040% ###
+[       6,       7 )    5562   5.562%  61.602% #
+[       7,       8 )    3215   3.215%  64.817% #
+[       8,       9 )    1244   1.244%  66.061% 
+[       9,      10 )     312   0.312%  66.373% 
+[      10,      12 )     164   0.164%  66.537% 
+[      12,      14 )      22   0.022%  66.559% 
+[      14,      16 )      16   0.016%  66.575% 
+[      16,      18 )      14   0.014%  66.589% 
+[      18,      20 )       8   0.008%  66.597% 
+[      20,      25 )      27   0.027%  66.624% 
+[      25,      30 )      18   0.018%  66.642% 
+[      30,      35 )       2   0.002%  66.644% 
+[      35,      40 )       4   0.004%  66.648% 
+[      40,      45 )       3   0.003%  66.651% 
+[      45,      50 )      50   0.050%  66.701% 
+[      50,      60 )     166   0.166%  66.867% 
+[      60,      70 )      14   0.014%  66.881% 
+[      70,      80 )      14   0.014%  66.895% 
+[      80,      90 )      18   0.018%  66.913% 
+[      90,     100 )      21   0.021%  66.934% 
+[     100,     120 )      61   0.061%  66.995% 
+[     120,     140 )      68   0.068%  67.063% 
+[     140,     160 )      51   0.051%  67.114% 
+[     160,     180 )      35   0.035%  67.149% 
+[     180,     200 )      59   0.059%  67.208% 
+[     200,     250 )      86   0.086%  67.294% 
+[     250,     300 )      50   0.050%  67.344% 
+[     300,     350 )      73   0.073%  67.417% 
+[     350,     400 )     129   0.129%  67.546% 
+[     400,     450 )     198   0.198%  67.744% 
+[     450,     500 )     192   0.192%  67.936% 
+[     500,     600 )    2939   2.939%  70.875% #
+[     600,     700 )    1986   1.986%  72.861% 
+[     700,     800 )     197   0.197%  73.058% 
+[     800,     900 )     136   0.136%  73.194% 
+[     900,    1000 )      83   0.083%  73.277% 
+[    1000,    1200 )    2357   2.357%  75.634% 
+[    1200,    1400 )    5703   5.703%  81.337% #
+[    1400,    1600 )    6440   6.440%  87.777% #
+[    1600,    1800 )    6311   6.311%  94.088% #
+[    1800,    2000 )    4590   4.590%  98.678% #
+[    2000,    2500 )     834   0.834%  99.512% 
+[    2500,    3000 )       5   0.005%  99.517% 
+[    3000,    3500 )       3   0.003%  99.520% 
+[    3500,    4000 )       8   0.008%  99.528% 
+[    4000,    4500 )      95   0.095%  99.623% 
+[    4500,    5000 )     106   0.106%  99.729% 
+[    5000,    6000 )     205   0.205%  99.934% 
+[    6000,    7000 )      55   0.055%  99.989% 
+[    7000,    8000 )       5   0.005%  99.994% 
+[    8000,    9000 )       1   0.001%  99.995% 
+[    9000,   10000 )       1   0.001%  99.996% 
+[   10000,   12000 )       4   0.004% 100.000% 
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;###C 顺序读取测试，readseq 1000W次
+测试前清空Cache。&lt;/p&gt;
+
+&lt;p&gt;批量读取性能接近300MB/S，换算为QPS为100W/S。曾经测试过的Innodb批量读取速度在20W行左右，因为Innodb的Page Size只有16KB，作为存储引擎应对大范围Rang查询性能足够。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench --db=./data_150g --threads=1 --reads=10000000 --num=1000000000 --value_size=300 --use_existing_db=1 --benchmarks=readseq --histogram=1
+LevelDB:    version 1.18
+CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
+CPUCache:   15360 KB
+Keys:       16 bytes each
+Values:     300 bytes each (150 bytes after compression)
+Entries:    1000000000
+RawSize:    301361.1 MB (estimated)
+FileSize:   158309.9 MB (estimated)
+WARNING: Snappy compression is not enabled
+------------------------------------------------
+readseq      :       1.022 micros/op;  295.0 MB/s     1000000 op/s 
+Microseconds per op:
+Count: 10000000  Average: 1.0215  StdDev: 24.70
+Min: 0.0000  Median: 0.8486  Max: 16578.0000
+------------------------------------------------------
+[       0,       1 ) 5892071  58.921%  58.921% ############
+[       1,       2 ) 3369861  33.699%  92.619% #######
+[       2,       3 )  559748   5.597%  98.217% #
+[       3,       4 )  142351   1.424%  99.640% 
+[       4,       5 )    7182   0.072%  99.712% 
+[       5,       6 )    1844   0.018%  99.731% 
+[       6,       7 )     960   0.010%  99.740% 
+[       7,       8 )     133   0.001%  99.742% 
+[       8,       9 )      74   0.001%  99.742% 
+[       9,      10 )      75   0.001%  99.743% 
+[      10,      12 )      99   0.001%  99.744% 
+[      12,      14 )     104   0.001%  99.745% 
+[      14,      16 )      54   0.001%  99.746% 
+[      16,      18 )      30   0.000%  99.746% 
+[      18,      20 )      49   0.000%  99.746% 
+[      20,      25 )      77   0.001%  99.747% 
+[      25,      30 )     111   0.001%  99.748% 
+[      30,      35 )     374   0.004%  99.752% 
+[      35,      40 )    1350   0.014%  99.765% 
+[      40,      45 )    1066   0.011%  99.776% 
+[      45,      50 )     124   0.001%  99.777% 
+[      50,      60 )      26   0.000%  99.778% 
+[      60,      70 )      11   0.000%  99.778% 
+[      70,      80 )     127   0.001%  99.779% 
+[      80,      90 )    1143   0.011%  99.790% 
+[      90,     100 )    2921   0.029%  99.820% 
+[     100,     120 )    8742   0.087%  99.907% 
+[     120,     140 )     233   0.002%  99.909% 
+[     140,     160 )     213   0.002%  99.912% 
+[     160,     180 )     461   0.005%  99.916% 
+[     180,     200 )     532   0.005%  99.921% 
+[     200,     250 )    1578   0.016%  99.937% 
+[     250,     300 )    3183   0.032%  99.969% 
+[     300,     350 )    1149   0.011%  99.981% 
+[     350,     400 )     111   0.001%  99.982% 
+[     400,     450 )      16   0.000%  99.982% 
+[     450,     500 )      10   0.000%  99.982% 
+[     500,     600 )      11   0.000%  99.982% 
+[     600,     700 )      38   0.000%  99.982% 
+[     700,     800 )     641   0.006%  99.989% 
+[     800,     900 )     962   0.010%  99.998% 
+[     900,    1000 )      46   0.000%  99.999% 
+[    1000,    1200 )      18   0.000%  99.999% 
+[    1200,    1400 )      11   0.000%  99.999% 
+[    1400,    1600 )       1   0.000%  99.999% 
+[    1600,    1800 )       2   0.000%  99.999% 
+[    1800,    2000 )       6   0.000%  99.999% 
+[    2000,    2500 )       3   0.000%  99.999% 
+[    2500,    3000 )       4   0.000%  99.999% 
+[    3000,    3500 )       5   0.000%  99.999% 
+[    3500,    4000 )       2   0.000%  99.999% 
+[    4000,    4500 )       3   0.000%  99.999% 
+[    4500,    5000 )       9   0.000% 100.000% 
+[    5000,    6000 )       1   0.000% 100.000% 
+[    8000,    9000 )      10   0.000% 100.000% 
+[    9000,   10000 )      33   0.000% 100.000% 
+[   16000,   18000 )       1   0.000% 100.000% 
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;###D，随机覆盖写入 fillrandom
+由于db_bench中没有指定write次数的参数，写入时只能用num参数，和表行数相同，10亿条记录的全量覆盖写入时间非常长，因此需要修改db_bench.cc,增加–writes参数，结果待给出&lt;/p&gt;
+
 </description>
         <pubDate>Sat, 21 May 2016 01:09:37 +0800</pubDate>
-        <link>http://luckywhu.github.io/personal/2016/05/21/first-post.html</link>
-        <guid isPermaLink="true">http://luckywhu.github.io/personal/2016/05/21/first-post.html</guid>
+        <link>http://luckywhu.github.io/leveldb/test/2016/05/21/leveldb-perf-test.html</link>
+        <guid isPermaLink="true">http://luckywhu.github.io/leveldb/test/2016/05/21/leveldb-perf-test.html</guid>
         
         
-        <category>personal</category>
+        <category>leveldb</category>
+        
+        <category>test</category>
         
       </item>
     
