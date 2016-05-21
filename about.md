@@ -1,10 +1,10 @@
 ---
 layout: page
-title: About me
+title: About
 permalink: /about/
 ---
 
-# About me
+# 个人简介
 
 - 就职于百度DBA团队，MySQL kernel小组，从事MySQL内核优化及数据库相关组件开发。
 - 专注于关系数据库，分布式存储方向的开发工作。
