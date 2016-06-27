@@ -1,15 +1,14 @@
 ---
 layout: post
 title:  "leveldb 编译测试"
-date:   2016-05-21 01:09:37 +0800
+date:   2016-05-21 01:00:37 +0800
 categories: leveldb test
 ---
 
 ## 编译安装
-跨平台特性比较好，
-mac下和linux下都直接编译通过，不做任何调整。
+leveldb 源代码的跨平台特性比较好，mac下和linux下都直接编译通过，不做任何调整。
 
-1. 直接编译 make  
+1. 进入源码目录直接编译 make  
 
 2. 编译并执行单元测试程序  make check，该命令会编译并执行db/XXX_test.cc产出的程序，包含一些单元测试和性能测试工具。
 
