@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Innodb数据文件管理综述"
+title:  "Innodb物理文件格式综述"
 date:   2016-06-27 01:09:37 +0800
 categories: mysql Innodb
 ---
