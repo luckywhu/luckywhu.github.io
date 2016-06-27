@@ -7,14 +7,14 @@ categories: mysql Innodb
 
 ### 关于该综述
 
-关于Innodb物理文件格式的文献综述. 基本资料来源于 [Jeremy Cole](https://blog.jcole.us/) 的博客以及 mysql5.1.63 的代码
-主要从Jeremy Cole如下两篇文章整理出来：
+关于Innodb物理文件格式的文献综述. 基本资料来源于 [Jeremy Cole](https://blog.jcole.us/) 的博客以及 mysql5.1.63 的代码, 文章中的画图全部来自Jeremy Cole如下的两篇博客文章：
 
 1. [The basics of InnoDB space file layout](https://blog.jcole.us/2013/01/03/the-basics-of-innodb-space-file-layout/)
 2. [The physical structure of InnoDB index pages](https://blog.jcole.us/2013/01/07/the-physical-structure-of-innodb-index-pages/)
 
-这是一篇整理自2013年12月份的资料，一直放在everynote里面没发表，现在拿出来，或许有人会感兴趣。
-code with markdown。
+我所做的工作只是阅读mysql源代码，并对每一幅图做注解，然后按照从宏观到微观的形式重新组织了一下材料。该篇综述覆盖了Innodb物理文件组织的大部分知识点，剩下的第六章是Innodb数据字典格式的内容，留待以后补充。
+
+综述写于2013年12月份，一直放在everynote里面没发表，现在拿出来，用marke down格式重写了一下，
 
 ## 1.物理页面结构
 
@@ -318,7 +318,7 @@ INSERT INTO t (i, s) VALUES (0, "A"), (1, "B"), (2, "C");
  ![innodb file header/trailer](/img/innodb_file_manage_post/btree_detailed_page_structure.png)
 
 
-##(5)记录行结构（barracuda compact format）
+## 5.记录行结构（barracuda compact format）
 
 Innodb的行主要由列值（Filed）和行记录头部组成。列值按照create table时定义顺序紧凑排列，中间没有分隔，在行记录头部，保存了一些信息，以表明该行相关信息，如各个字段的实际长度，是否被删除，是否是最小行，列数，下一行指针等。需要注意的是在Innodb的格式中，next Record offset指针指向的下一行位置，代表的是该行实际的列值开始的地方，并不包含行头部。如果要得到该行的一些元信息，需要从指针位置向前回溯。由于列值长度的不同，一个行的头部长度也是变长的。一个行的头部布局如下所示，包含6个字节定长部分和变长部分。
 
@@ -366,4 +366,11 @@ Innodb中的行，除了记录自己的内容外，还会记录一些额外的�
 
 **secondary key nonleaf pages**
  ![innodb file header/trailer](/img/innodb_file_manage_post/secondary_key_nonleaf_pages.png)
+ 
+## 6. 数据字典Data Dictinary
+
+该部分未完待续。
+
+
+
 
