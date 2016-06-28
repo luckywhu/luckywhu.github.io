@@ -12,9 +12,9 @@ categories: mysql Innodb
 1. [The basics of InnoDB space file layout](https://blog.jcole.us/2013/01/03/the-basics-of-innodb-space-file-layout/)
 2. [The physical structure of InnoDB index pages](https://blog.jcole.us/2013/01/07/the-physical-structure-of-innodb-index-pages/)
 
-我所做的工作只是阅读mysql源代码，并对每一幅图做注解，然后按照从宏观到微观的形式重新组织了一下材料。该篇综述覆盖了Innodb物理文件组织的大部分知识点，剩下的第六章是Innodb数据字典格式的内容，留待以后补充。
+我按照Jeremy Cole博客的材料，对照阅读mysql源代码，然后按照从宏观到微观的形式重新组织了一下材料。该篇综述覆盖了Innodb物理文件组织的大部分知识点，剩下的第六章是Innodb数据字典格式的内容，留待以后补充。
 
-综述写于2013年12月份，一直放在everynote里面没发表，现在拿出来，用marke down格式重写了一下，
+综述写于2013年12月份，一直放在everynote里面没发表，现在拿出来，用marke down格式重写了一下。
 
 ## 1.物理页面结构
 
