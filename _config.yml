@@ -9,7 +9,7 @@
 title: 猴子爱吃鱼的Blog
 email: jianyingse@gmail.com
 description: > # this means to ignore newlines until "baseurl:"
-  A Coder, 专注码代码11年，专注数据库，专注MySQL。
+  A Coder, 一直做数据库
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://luckywhu.github.io" # the base hostname & protocol for your site
 twitter_username: jianyingse
