@@ -2,7 +2,7 @@
 layout: post
 title:  "Rocksdb Compaction实现逻辑"
 date:   2017-08-03 01:09:37 +0800
-categories: kv rocksdb
+categories: engine rocksdb
 ---
 
 **1. Rocksdb文件组织整体视图**
@@ -92,7 +92,7 @@ datablock中所有key-value对紧凑排列，同时使用前缀压缩以节省�
 1. 每一个key-value pair是一组记录，每组记录包含key和value，
 2. 由于相同区间的key前缀重复较多，采用前缀压缩方式，如果一个key-value和前一个key-value记录的key重合可以只保存后缀部分，每隔一定记录条目，会有一个restar特点，在restart点上，即使key的前缀和前一条记录有相同也会保存完整记录，因此在restart点上key前缀长度字段长度为0
 
-**6，compaction的最小子问题**
+**6，Rocksdb Compaction的最小子问题**
 
 简单来讲compaction动作拆分为最小单元就是上一小节中所讲的两个data  block之间的合并。初步设想的接口如下
 
@@ -114,6 +114,3 @@ merge过程基本操作
 
 2，两个block中可能存在重复记录，则根据key字段的特定属性进行删除。
 
-**7, 交互过程**
-
-Rocksdb的compaction主控逻辑会将comaction拆解成6节中描述的一个个子任务并post给 FPGA执行，根据FPGA的处理速度可以采用同步或者异步响应的模式与主逻辑进行交互。
