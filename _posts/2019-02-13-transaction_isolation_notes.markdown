@@ -45,7 +45,7 @@ categories: transaction database
 
 *为了有更普适的意义,我认为应该使用基于phenomena定义的事务隔离级别*
 
-### 5.串行化(serializability)
+### 5.串行化(serializable)
 
 **定义:**多个事务的执行结果和它们的某个串行化执行(无并发,事务的执行时间区间没有重叠)的结果是一致的
 
@@ -53,7 +53,7 @@ categories: transaction database
 
 在加锁的实现中, **读加长锁, 写加长锁, 同时对predicates条件覆盖的范围加加长锁**.
 
-### 6.严格串行化(strict serializability)
+### 6.严格串行化(strict serializable)
 
 **定义**:满足串行化要求执行的事务,同时保证事务的执行顺序(提交时间戳)和事务实际运行中的前后关系保持一致.
 

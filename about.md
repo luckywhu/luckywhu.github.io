@@ -20,8 +20,9 @@ permalink: /about/
 
 ## Presentation
 
-Infoq百度技术沙龙分享 [高性能MySQL存储引擎SeqDB](http://www.infoq.com/cn/presentations/seqdb-high-performance-mysql-storage-engine/)  
+Infoq百度技术沙龙分享 [高性能MySQL存储引擎SeqDB](https://www.infoq.cn/zones/baidu-salon/content-37.html)  
 QCon2016技术分享 [MySQL数据库变更发布系统DTS](http://2016.qconbeijing.com/presentation/2838)  
+ArchSummit2019技术分享 [X-DB FPGA异构计算加速](https://sz2018.archsummit.com/presentation/699)  
 
 ## 联系方式
 
