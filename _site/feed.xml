@@ -2,553 +2,1019 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>猴子爱吃鱼的Blog</title>
-    <description>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.
+    <description>A Coder, 一直做数据库
 </description>
-    <link>http://luckywhu.github.io/</link>
-    <atom:link href="http://luckywhu.github.io/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sat, 21 May 2016 12:18:15 +0800</pubDate>
-    <lastBuildDate>Sat, 21 May 2016 12:18:15 +0800</lastBuildDate>
-    <generator>Jekyll v3.1.6</generator>
+    <link>http://localhost:4000/</link>
+    <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Thu, 03 Aug 2017 09:18:29 +0800</pubDate>
+    <lastBuildDate>Thu, 03 Aug 2017 09:18:29 +0800</lastBuildDate>
+    <generator>Jekyll v3.5.1</generator>
     
       <item>
-        <title>Jekyll Blog Sample!</title>
-        <description>&lt;p&gt;You’ll find this post in your &lt;code class=&quot;highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run &lt;code class=&quot;highlighter-rouge&quot;&gt;jekyll serve&lt;/code&gt;, which launches a web server and auto-regenerates your site when a file is updated.&lt;/p&gt;
+        <title>Rocksdb Compaction实现逻辑</title>
+        <description>&lt;p&gt;&lt;strong&gt;1. Rocksdb文件组织整体视图&lt;/strong&gt;&lt;/p&gt;
 
-&lt;p&gt;To add new posts, simply add a file in the &lt;code class=&quot;highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory that follows the convention &lt;code class=&quot;highlighter-rouge&quot;&gt;YYYY-MM-DD-name-of-post.ext&lt;/code&gt; and includes the necessary front matter. Take a look at the source for this post to get an idea about how it works.&lt;/p&gt;
+&lt;p&gt;Rocksdb磁盘上的文件组织成一个多层结构，以level-1，level-2,level-3（或者L1,L2)区分，其中&lt;/p&gt;
 
-&lt;p&gt;Jekyll also offers powerful support for code snippets:&lt;/p&gt;
+&lt;p&gt;A, L0层可能有多个文件，由于L0层的文件来自内存中的memtable直接写盘，因此多个L0文件之间可能存在key重叠，&lt;/p&gt;
 
-&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-  &lt;span class=&quot;nb&quot;&gt;puts&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;Hi, &lt;/span&gt;&lt;span class=&quot;si&quot;&gt;#{&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;&#39;Tom&#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;c1&quot;&gt;#=&amp;gt; prints &#39;Hi, Tom&#39; to STDOUT.&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+&lt;p&gt;B, L1-Ln层，每一层之内，每个文件都包含不同的key区间，而不同层之内，key区间会存在重叠部分&lt;/p&gt;
 
-&lt;p&gt;Check out the &lt;a href=&quot;http://jekyllrb.com/docs/home&quot;&gt;Jekyll docs&lt;/a&gt; for more info on how to get the most out of Jekyll. File all bugs/feature requests at &lt;a href=&quot;https://github.com/jekyll/jekyll&quot;&gt;Jekyll’s GitHub repo&lt;/a&gt;. If you have questions, you can ask them on &lt;a href=&quot;https://talk.jekyllrb.com/&quot;&gt;Jekyll Talk&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1LYewRFXXXXXSXpXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;在每一层中，key根据所处的区间，保存在不同的SST文件中，同时每个SST文件内部也是有序的&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1RANORFXXXXchapXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;每一层的文件大小之和都有个限定值，如果超过限制，Compaction将会将本层的文件与下层的文件合并，减少本层文件数目及大小。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1WQXVRFXXXXcOaXXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;2，Compaction逻辑&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;如果L0层的文件数目超过一个限制值level0_file_num_compaction_trigger，则L0层的文件会被compaction，并写入到L1层文件中，由于L0层的文件之间Key是可能重叠的，因此合并L0的时候，需要所有文件一起合并，&lt;strong&gt;这是一个多路归并过程&lt;/strong&gt; 如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1trVVRFXXXXXOapXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;合并完L0层文件之后，合并之后的内容会写入L1层，此时可能导致L1层文件整体size变大，并超过某限制值，此时会触发L1层与L2层的合并&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1fqBYRFXXXXcHaXXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;对于L1-L2层的compaction，可能会选中1~n个同一层的sst文件，并和其下一层进行合并，如下图所示&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1RXKnRFXXXXXeXFXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;合并的结果是增加L2层文件的数目，如下图所示&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1jpGlRFXXXXaXXFXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;依次类推，L2层与L3层之间的合并如下图：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1zY1wRFXXXXXWXpXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;L2与L3之间的合并结果如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1sjBRRFXXXXaoapXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;考虑到多层之间的compaction并不冲突，因此多层之间的compaction过程可以并行执行，如下图所示&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1T94QRFXXXXaZapXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;3，特殊的L0层的compaction&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;由于L0层的特殊性，其多个文件之间的key可能是重叠的，因此原本不能通过并行compaciton来实现文件的，但如果多个L0之间Range如果可以划分开，形成不同的group，则可以开启多个subcompaction任务，进行并行执行，如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1xLqsRFXXXXa_XpXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;4，sst文件的格式&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;一个sst文件根据用户的配置，会有不同的大小，如4MB，16MB，256MB等，sst文件由block以及一些meta信息组成, 大体的架构如下图所示&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&amp;lt;beginning_of_file&amp;gt;
+[data block 1]
+[data block 2]
+...
+[data block N]
+[meta block 1: filter block]                  (see section: &quot;filter&quot; Meta Block)
+[meta block 2: stats block]                   (see section: &quot;properties&quot; Meta Block)
+[meta block 3: compression dictionary block]  (see section: &quot;compression dictionary&quot; Meta Block)
+...
+[meta block K: future extended block]  (we may add more meta blocks in the future)
+[metaindex block]
+[index block]
+[Footer]                               (fixed size; starts at file_size - sizeof(Footer))
+&amp;lt;end_of_file&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;一个sst文件中的key和value会按key的大小顺序排好序存放，然后存放在不同的block中，每个block也是从文件开始逐个存放，&lt;/li&gt;
+  &lt;li&gt;数据block内容之后，存放了一些meta block，这些meta  block的内容用于快速定位key属于那个block。例如index block中保存了每个data block中记录的最大key大小，这样通过在index block中查找可以迅速定位到一个key具体位于那个data block&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;5, data block的格式&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;datablock中所有key-value对紧凑排列，同时使用前缀压缩以节省空间。格式如下&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://gw.alicdn.com/tfscom/TB1HjF9RFXXXXcvXVXXXXXXXXXX.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;每一个key-value pair是一组记录，每组记录包含key和value，&lt;/li&gt;
+  &lt;li&gt;由于相同区间的key前缀重复较多，采用前缀压缩方式，如果一个key-value和前一个key-value记录的key重合可以只保存后缀部分，每隔一定记录条目，会有一个restar特点，在restart点上，即使key的前缀和前一条记录有相同也会保存完整记录，因此在restart点上key前缀长度字段长度为0&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;6，Rocksdb Compaction的最小子问题&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;简单来讲compaction动作拆分为最小单元就是上一小节中所讲的两个data  block之间的合并。初步设想的接口如下&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-C&quot;&gt;//合并block1  block2，输出到一个output_block
+void single_block_merge(BLOCK* block_1, /*in*/
+                 BLOCK* block_2, /*in*/
+                 BLOCK* output_block /*out*/)
+//合并一组block，并输出到指定空间位置
+void multi_block_merge(BLOCK** input_block_array, /*in*/
+                       size_t input_blokc_array_size,/*in*/
+                       BLOCK** output_block_array, /*out 此处有足够内存保存merge的输出*/
+                       size_t&amp;amp; output_block_array_size,/*out*/)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;merge过程基本操作&lt;/p&gt;
+
+&lt;p&gt;1，两个block中记录的归并排序，输出一个完整有序数组，并也按原有格式输出合并之后的BLOCK&lt;/p&gt;
+
+&lt;p&gt;2，两个block中可能存在重复记录，则根据key字段的特定属性进行删除。&lt;/p&gt;
 
 </description>
-        <pubDate>Sat, 21 May 2016 01:09:37 +0800</pubDate>
-        <link>http://luckywhu.github.io/jekyll/sample/2016/05/21/welcome-to-jekyll.html</link>
-        <guid isPermaLink="true">http://luckywhu.github.io/jekyll/sample/2016/05/21/welcome-to-jekyll.html</guid>
+        <pubDate>Thu, 03 Aug 2017 01:09:37 +0800</pubDate>
+        <link>http://localhost:4000/engine/rocksdb/2017/08/03/rocksdb_compaction_impl.html</link>
+        <guid isPermaLink="true">http://localhost:4000/engine/rocksdb/2017/08/03/rocksdb_compaction_impl.html</guid>
         
         
-        <category>jekyll</category>
+        <category>engine</category>
         
-        <category>sample</category>
+        <category>rocksdb</category>
         
       </item>
     
       <item>
-        <title>leveldb 编译测试</title>
-        <description>&lt;h2 id=&quot;section&quot;&gt;编译安装&lt;/h2&gt;
-&lt;p&gt;跨平台特性比较好，
-mac下和linux下都直接编译通过，不做任何调整。&lt;/p&gt;
+        <title>Innodb物理文件格式综述</title>
+        <description>&lt;h3 id=&quot;关于该综述&quot;&gt;关于该综述&lt;/h3&gt;
+
+&lt;p&gt;关于Innodb物理文件格式的文献综述. 基本资料来源于 &lt;a href=&quot;https://blog.jcole.us/&quot;&gt;Jeremy Cole&lt;/a&gt; 的博客以及 mysql5.1.63 的代码, 文章中的画图全部来自Jeremy Cole如下的两篇博客文章：&lt;/p&gt;
 
 &lt;ol&gt;
-  &lt;li&gt;
-    &lt;p&gt;直接编译 make&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;编译并执行单元测试程序  make check，该命令会编译并执行db/XXX_test.cc产出的程序，包含一些单元测试和性能测试工具。&lt;/p&gt;
-  &lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://blog.jcole.us/2013/01/03/the-basics-of-innodb-space-file-layout/&quot;&gt;The basics of InnoDB space file layout&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://blog.jcole.us/2013/01/07/the-physical-structure-of-innodb-index-pages/&quot;&gt;The physical structure of InnoDB index pages&lt;/a&gt;&lt;/li&gt;
 &lt;/ol&gt;
 
-&lt;h2 id=&quot;dbbench&quot;&gt;性能测试工具db_bench&lt;/h2&gt;
-&lt;p&gt;db/db_bench.cc 编译后产出物为db_bench，可以用来做一些基本的性能测试。
-不带参数运行输出如下，主要包含两个指标，单次请求的响应时间，以及最终反映出来的IO速率。&lt;/p&gt;
+&lt;p&gt;我按照Jeremy Cole博客的材料，对照阅读mysql源代码，然后按照从宏观到微观的形式重新组织了一下材料。该篇综述覆盖了Innodb物理文件组织的大部分知识点，剩下的第六章是Innodb数据字典格式的内容，留待以后补充。&lt;/p&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[leveldb]$ ./db_bench 
-LevelDB:    version 1.18
-CPU:        8 * Intel(R) Xeon(R) CPU           E5620  @ 2.40GHz
-CPUCache:   12288 KB
-Keys:       16 bytes each
-Values:     100 bytes each (50 bytes after compression)
-Entries:    1000000
-RawSize:    110.6 MB (estimated)
-FileSize:   62.9 MB (estimated)
-WARNING: Snappy compression is not enabled
-------------------------------------------------
-fillseq      :       2.843 micros/op;   38.9 MB/s     
-fillsync     :    8688.742 micros/op;    0.0 MB/s (1000 ops)
-fillrandom   :       4.849 micros/op;   22.8 MB/s     
-overwrite    :       5.963 micros/op;   18.6 MB/s     
-readrandom   :       5.756 micros/op; (1000000 of 1000000 found)
-readrandom   :       4.835 micros/op; (1000000 of 1000000 found)
-readseq      :       0.249 micros/op;  444.0 MB/s    
-readreverse  :       0.545 micros/op;  202.9 MB/s    
-compact      :  803955.000 micros/op;
-readrandom   :       3.283 micros/op; (1000000 of 1000000 found)
-readseq      :       0.214 micros/op;  516.2 MB/s    
-readreverse  :       0.472 micros/op;  234.2 MB/s    
-fill100K     :    1430.834 micros/op;   66.7 MB/s (1000 ops)
-crc32c       :       5.043 micros/op;  774.6 MB/s (4K per op)
-snappycomp   :    5425.000 micros/op; (snappy failure)
-snappyuncomp :    4940.000 micros/op; (snappy failure)
-acquireload  :       0.847 micros/op; (each op is 1000 loads)
-&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;p&gt;从输出看，测试类型包含了顺序写入，随机写入，顺序读取，随机读取等，基本包含了使用中需要关注的所有场景。
-由于没有–help参数，所以参数指定需要查看源码获得，修改db_bench.cc，添加一个usage函数，输出帮助文档。&lt;/p&gt;
+&lt;p&gt;综述写于2013年12月份，一直放在everynote里面没发表，现在拿出来，用marke down格式重写了一下。&lt;/p&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench     --db=db_dir          
-               --benchmarks=        
-               --num=               
-               --threads=           
-               --value_size=        
-               --use_existing_db=   
-               --compression_ratio= 
-               --histogram=         
-               --reads=             
-               --cache_size=        
-               --bloom_bits=        
-               --open_files= 
-&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
-&lt;p&gt;参数的作用如下&lt;/p&gt;
+&lt;h2 id=&quot;1物理页面结构&quot;&gt;1.物理页面结构&lt;/h2&gt;
+
+&lt;p&gt;Innodb通过表空间来管理所有的物理文件，当使用共享表空间时，表空间只有一个，但可能包含多个物理文件，这些物理文件组成一个表空间，启用独立表空间时，除了共享表空间之外，每个表读都独享一个物理文件，但独立表空间只能包含一个物理文件。Innnodb使用一个4字节的整数对物理表空间进行编号，系统表空间作为第一个文件编号为0，其他表空间使用的编号依次递增。&lt;/p&gt;
+
+&lt;p&gt;  所有的表空间都会划分成UNIV_PAGE_SIZE 大小的页，这个大小是一个编译时确定的长度，默认是16K（2*8192）字节。页是innodb文件分配的基本单位。页可以组成区（extent），段等。
+每个页初始化之后，元信息占据头部38字节和尾部8字节。 剩下的16384-46=16338字节存储数据内容。如下图所示&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/innodb_file_page_structure.jpg&quot; alt=&quot;innodb page manage&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;头部38字节和尾部8字节的内容定义如下：
+&lt;img src=&quot;/img/innodb_file_manage_post/innodb_file_header_trailer.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;该部分的代码定义在storage/innobase/include/Fil0fil.h文件中。其中各个字段的含义如下表所示&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;物理页内容&lt;/strong&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
 
 &lt;table&gt;
   &lt;thead&gt;
     &lt;tr&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;参数&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;相对头部偏移&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;长度（字节）&lt;/th&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt;内容&lt;/th&gt;
       &lt;th style=&quot;text-align: left&quot;&gt;解释&lt;/th&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;默认值&lt;/th&gt;
     &lt;/tr&gt;
   &lt;/thead&gt;
   &lt;tbody&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–benchamarks&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;测试类型，读，写等&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;默认测试所有的suit&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–db&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;数据库目录&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;/tmp/leveldb_test_XXX&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–use_existing_db&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;使用已存在的数据库文件&lt;/td&gt;
       &lt;td style=&quot;text-align: left&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;checksum&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;该页的校验和&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–num&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;记录行数&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;1000000&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Page Number&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;页号，表空间中的所有页都会进行编号，是一个32位整数，总偏移0开始，依次递增。&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–threads&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;测试线程数&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;8&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Previous page&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;在一个连成双向链表的页组织结构中，指向其前一页的地址。这些页物理上可能不是相邻的。靠指针链接起来&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–reads&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;只读测试中读的次数&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;12&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Next page&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;同Previous page，指向后一页的地址。&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–value_size&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;k,v中value的长度&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;默认是100&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;16&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;8&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Last LSN&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;最后一次更新本页的事务日志编号，在Innodb的事务系统中有用&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–cache_size&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;LRU的cache大小&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;使用DB的默认值&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;24&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;2&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Page Type&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;页类型，下表解释&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–bloom_bits&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;bloom过滤器bits数&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;使用DB默认值&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;26&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;8&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Flush LSN&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;该数据库最新flush的LSN，注意这是整个数据库的checkpoint点，只在系统表空间的第一个page中有效，在其他所有的page中是都填0&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–open_files&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;打开文件数&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;默认1000&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;34&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Space ID&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;表空间编号&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–compression_ration&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;压缩率，默认snappy压缩&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;0.5&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;16376&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Old_style checksum&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;老式checksum，作用同头部4字节。后续可能废弃。&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;–write_buffer_size&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;写入缓冲区大小&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;4MB&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;16484&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;4&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;LSN的低4字节&lt;/td&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;同Last LSN的低4字节&lt;/td&gt;
     &lt;/tr&gt;
   &lt;/tbody&gt;
 &lt;/table&gt;
 
-&lt;p&gt;其中benchmarks可选值如下&lt;/p&gt;
+&lt;hr /&gt;
+
+&lt;p&gt;Innodb的表page类型总共有如下11种，如下表所示&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;innodb的page类型&lt;/strong&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
 
 &lt;table&gt;
   &lt;thead&gt;
     &lt;tr&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;测试名&lt;/th&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;测试场景&lt;/th&gt;
+      &lt;th&gt;类型&lt;/th&gt;
+      &lt;th&gt;数字编号&lt;/th&gt;
+      &lt;th&gt;意义&lt;/th&gt;
     &lt;/tr&gt;
   &lt;/thead&gt;
   &lt;tbody&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;fillseq&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– write N values in sequential key order in async mode&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_INDEX&lt;/td&gt;
+      &lt;td&gt;17855&lt;/td&gt;
+      &lt;td&gt;索引页&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;fillrandom&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– write N values in random key order in async mode&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_UNDO_LOG&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;undo页&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;overwrite&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– overwrite N values in random key order in async mode&lt;/td&gt;
+      &lt;td&gt;FILE_PAGE_INODE&lt;/td&gt;
+      &lt;td&gt;3&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;fillsync&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– write N/100 values in random key order in sync mode&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_IBUF_REEE_LIST&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;插入缓冲空闲页链表&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;fill100K&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– write N/1000 100K values in random order in async mode&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_ALLOCATED&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+      &lt;td&gt;新分配的页&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;deleteseq&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– delete N keys in sequential order&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_IBUF_BITMAP&lt;/td&gt;
+      &lt;td&gt;5&lt;/td&gt;
+      &lt;td&gt;插入缓冲位图&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;deleterandom&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– delete N keys in random order&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_SYS&lt;/td&gt;
+      &lt;td&gt;6&lt;/td&gt;
+      &lt;td&gt;系统页（如数据字典等）&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;readseq&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– read N times sequentially&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_TRX_SYS&lt;/td&gt;
+      &lt;td&gt;7&lt;/td&gt;
+      &lt;td&gt;事务系统页&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;readreverse&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in reverse order&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_FSP_HDR&lt;/td&gt;
+      &lt;td&gt;8&lt;/td&gt;
+      &lt;td&gt;表空间头页，每个表空间中的第一个页&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;readrandom&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in random order&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_XDES&lt;/td&gt;
+      &lt;td&gt;9&lt;/td&gt;
+      &lt;td&gt;区描述页，表空间中，每16384个page需要一个区描述页，描述256MB大小的extent的使用情况&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;readmissing&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– read N missing keys in random order&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;readhot&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– read N times in random order from 1% section of DB&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;seekrandom&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– N random seeks&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;open&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– cost of opening a DB&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;crc32c&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– repeated crc32c of 4K of data&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;acquireload&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;– load N*1000 times&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_BLOB&lt;/td&gt;
+      &lt;td&gt;10&lt;/td&gt;
+      &lt;td&gt;未压缩的BLOB页&lt;/td&gt;
     &lt;/tr&gt;
   &lt;/tbody&gt;
 &lt;/table&gt;
 
-&lt;p&gt;##基本测试
-比较感兴趣的是大数据量下的读写性能，因此测试了10亿条记录，value_size=300,数据集在280GB的场景。
-单线程顺序插入。对db_bench.cc稍作修改，以便同时输出OPS数据。
-服务器配置如下，虽然内存较大，但每次测试前均清空Cache&lt;/p&gt;
+&lt;hr /&gt;
 
-&lt;ol&gt;
-  &lt;li&gt;磁盘为单盘450GB的SSD，ext3文件系统，未做RAID。&lt;/li&gt;
-  &lt;li&gt;CPU为12核心E5620 CPUcache 12MB，&lt;/li&gt;
-  &lt;li&gt;服务器内存96GB&lt;/li&gt;
-&lt;/ol&gt;
+&lt;h2 id=&quot;2表空间组织&quot;&gt;2.表空间组织&lt;/h2&gt;
 
-&lt;p&gt;###A.写入测试,单线程fillseq  10亿条记录&lt;/p&gt;
+&lt;p&gt;Innodb中文件分两种类型，日志文件和数据文件，数据文件由表空间组成，而表空间则由不同的页组成。启用innodb_file_per_table之后，表空间分为两种：系统表空间（编号0）和独立表空间。无论哪种表空间其大的架构都如下图所示。&lt;/p&gt;
 
-&lt;p&gt;单线程写入数据如下，10亿条记录，未压缩size在300GB左右。磁盘IO峰值观察到在60MB/S。
-最终体现出来的ops为11.5W/S，平均磁盘IO速度为35MB/S。数据目录下查看有8W多个3.5MB的小文件。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/space_file_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;测试命令
-./db_bench --benchmarks=fillseq --db=./db_150G --threads=1 --num=1000000000 --value_size=300 --histogram=1
+&lt;p&gt;Innodb物理文件增长以extent为单位，每个extent为1MB（64个page）。对于每一个extent，innodb使用40字节的空间（XDES entry）来描述该extent中的页面使用情况。&lt;/p&gt;
 
-LevelDB:    version 1.18
-CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
-CPUCache:   15360 KB
-Keys:       16 bytes eachps                              
-Values:     300 bytes each (150 bytes after compression)
-Entries:    1000000000
-RawSize:    301361.1 MB (estimated)
-FileSize:   158309.9 MB (estimated)
-WARNING: Snappy compression is not enabled
-------------------------------------------------
-fillseq      :       8.632 micros/op;   34.9 MB/s      115848 op/s 
-Microseconds per op:
-Count: 1000000000  Average: 8.6323  StdDev: 537.24
-Min: 2.0000  Median: 3.8754  Max: 173675.0000
-------------------------------------------------------
-[       2,       3 ) 7967127   0.797%   0.797% 
-[       3,       4 ) 562070985  56.207%  57.004% ###########
-[       4,       5 ) 327928783  32.793%  89.797% #######
-[       5,       6 ) 13237323   1.324%  91.120% 
-[       6,       7 ) 4833270   0.483%  91.604% 
-[       7,       8 ) 38261699   3.826%  95.430% #
-[       8,       9 ) 30819496   3.082%  98.512% #
-[       9,      10 ) 8236891   0.824%  99.336% 
-[      10,      12 ) 4430341   0.443%  99.779% 
-[      12,      14 ) 1502560   0.150%  99.929% 
-[      14,      16 )  284303   0.028%  99.957% 
-[      16,      18 )   59401   0.006%  99.963% 
-[      18,      20 )   19740   0.002%  99.965% 
-[      20,      25 )   28390   0.003%  99.968% 
-[      25,      30 )    5991   0.001%  99.969% 
-[      30,      35 )    3064   0.000%  99.969% 
-[      35,      40 )    5397   0.001%  99.969% 
-[      40,      45 )    4382   0.000%  99.970% 
-[      45,      50 )    1839   0.000%  99.970% 
-[      50,      60 )    2834   0.000%  99.970% 
-[      60,      70 )    2356   0.000%  99.971% 
-[      70,      80 )    2084   0.000%  99.971% 
-[      80,      90 )    2184   0.000%  99.971% 
-[      90,     100 )    1767   0.000%  99.971% 
-[     100,     120 )    3712   0.000%  99.972% 
-[     120,     140 )    3354   0.000%  99.972% 
-[     140,     160 )    2916   0.000%  99.972% 
-[     160,     180 )    3173   0.000%  99.973% 
-[     180,     200 )    3152   0.000%  99.973% 
-[     200,     250 )    6253   0.001%  99.973% 
-[     250,     300 )    6175   0.001%  99.974% 
-[     300,     350 )    5913   0.001%  99.975% 
-[     350,     400 )    5066   0.001%  99.975% 
-[     400,     450 )    4726   0.000%  99.976% 
-[     450,     500 )    5911   0.001%  99.976% 
-[     500,     600 )   13321   0.001%  99.978% 
-[     600,     700 )   14018   0.001%  99.979% 
-[     700,     800 )   11826   0.001%  99.980% 
-[     800,     900 )    8459   0.001%  99.981% 
-[     900,    1000 )    5015   0.001%  99.982% 
-[    1000,    1200 )    5448   0.001%  99.982% 
-[    1200,    1400 )    4891   0.000%  99.983% 
-[    1400,    1600 )    3869   0.000%  99.983% 
-[    1600,    1800 )    4098   0.000%  99.983% 
-[    1800,    2000 )    3073   0.000%  99.984% 
-[    2000,    2500 )    6602   0.001%  99.984% 
-[    2500,    3000 )    3444   0.000%  99.985% 
-[    3000,    3500 )    3696   0.000%  99.985% 
-[    3500,    4000 )    4428   0.000%  99.985% 
-[    4000,    4500 )    4686   0.000%  99.986% 
-[    4500,    5000 )    3628   0.000%  99.986% 
-[    5000,    6000 )    6455   0.001%  99.987% 
-[    6000,    7000 )    9081   0.001%  99.988% 
-[    7000,    8000 )    6969   0.001%  99.989% 
-[    8000,    9000 )    8653   0.001%  99.989% 
-[    9000,   10000 )    7936   0.001%  99.990% 
-[   10000,   12000 )   13921   0.001%  99.992% 
-[   12000,   14000 )    6197   0.001%  99.992% 
-[   14000,   16000 )    4853   0.000%  99.993% 
-[   16000,   18000 )    2430   0.000%  99.993% 
-[   18000,   20000 )    2238   0.000%  99.993% 
-[   20000,   25000 )    5895   0.001%  99.994% 
-[   25000,   30000 )    3523   0.000%  99.994% 
-[   30000,   35000 )    4799   0.000%  99.995% 
-[   35000,   40000 )    7366   0.001%  99.995% 
-[   40000,   45000 )    4145   0.000%  99.996% 
-[   45000,   50000 )    3736   0.000%  99.996% 
-[   50000,   60000 )    8477   0.001%  99.997% 
-[   60000,   70000 )    6930   0.001%  99.998% 
-[   70000,   80000 )    6620   0.001%  99.998% 
-[   80000,   90000 )    5351   0.001%  99.999% 
-[   90000,  100000 )    6165   0.001%  99.999% 
-[  100000,  120000 )    5191   0.001% 100.000% 
-[  120000,  140000 )       7   0.000% 100.000% 
-[  160000,  180000 )       2   0.000% 100.000% 
-&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
+&lt;p&gt;&lt;strong&gt;XDES entry&lt;/strong&gt;&lt;/p&gt;
 
-&lt;p&gt;###B，随机读取测试，randrandom 10W次
-测试前清空Cache.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/xdes_entry.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
 
-&lt;p&gt;随机读取10W次，测出性能在2000QPS左右，但磁盘IO维持在130MB/S,iostat中观察到测试分区IO使用率保持在100%。从已阅读的db_bench.cc中对leveldb的使用方式看，OPEN函数可以传进去一个LRUCache，以作缓存block用。对于一次随机读取，leveldb应该需要将该行记录所在的block读到内存，这意味着，如果没有命中cache，为了读300byte的记录，却要完成3.5MB的读IO。这种特性对顺序读取比较好，但对随机IO比较致命。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;xdes entry各个字段含义&lt;/strong&gt;&lt;/p&gt;
 
-&lt;p&gt;作为存储引擎，可优化方向&lt;/p&gt;
+&lt;hr /&gt;
 
-&lt;ul&gt;
-  &lt;li&gt;加入行级别缓存&lt;/li&gt;
-  &lt;li&gt;直接使用SSD随机读，不使用Buffered IO&lt;/li&gt;
-&lt;/ul&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;释义&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N+0&lt;/td&gt;
+      &lt;td&gt;8&lt;/td&gt;
+      &lt;td&gt;File Segment ID&lt;/td&gt;
+      &lt;td&gt;该extent所属的段编号，文件段用来区分不同的内容，使用数字编号，例如一个表的索引叶子节点和非叶子节点分为属不同的段。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N+8&lt;/td&gt;
+      &lt;td&gt;12&lt;/td&gt;
+      &lt;td&gt;List node for XDES List&lt;/td&gt;
+      &lt;td&gt;一个双向链表结构，指明在该extent所属的段的extent entry链表中，前向节点页和后向节点的位置。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N+20&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;STAT&lt;/td&gt;
+      &lt;td&gt;该extent的状态，有四种类型FREE，FREE_FRAG， FULL_FRAG，FSEG。 前三种类型表明其属于该表空间中同类型的区域。而FSEG表明该page已经被分配，其File Segment ID指明了其所属的段编号&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N+24&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;Page Stat Bitmap&lt;/td&gt;
+      &lt;td&gt;页位图，每2个bit描述一个页。第一个比特表示该页是否是空闲，第二个bit表示该页是否有更新没有被刷盘，目前第二个bit保留未用。&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench --db=./data_150g --threads=1 --reads=100000 --num=1000000000 --value_size=300 --use_existing_db=1 --benchmarks=readrandom --histogram=1      
-LevelDB:    version 1.18
-CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
-CPUCache:   15360 KB
-Keys:       16 bytes each
-Values:     300 bytes each (150 bytes after compression)
-Entries:    1000000000
-RawSize:    301361.1 MB (estimated)
-FileSize:   158309.9 MB (estimated)
-WARNING: Snappy compression is not enabled
-------------------------------------------------
-readrandom   :     472.792 micros/op; (100000 of 1000000000 found)        2127 op/s 
-Microseconds per op:
-Count: 100000  Average: 472.7952  StdDev: 765.77
-Min: 2.0000  Median: 5.5320  Max: 11067.0000
-------------------------------------------------------
-[       2,       3 )     282   0.282%   0.282% 
-[       3,       4 )   16034  16.034%  16.316% ###
-[       4,       5 )   26818  26.818%  43.134% #####
-[       5,       6 )   12906  12.906%  56.040% ###
-[       6,       7 )    5562   5.562%  61.602% #
-[       7,       8 )    3215   3.215%  64.817% #
-[       8,       9 )    1244   1.244%  66.061% 
-[       9,      10 )     312   0.312%  66.373% 
-[      10,      12 )     164   0.164%  66.537% 
-[      12,      14 )      22   0.022%  66.559% 
-[      14,      16 )      16   0.016%  66.575% 
-[      16,      18 )      14   0.014%  66.589% 
-[      18,      20 )       8   0.008%  66.597% 
-[      20,      25 )      27   0.027%  66.624% 
-[      25,      30 )      18   0.018%  66.642% 
-[      30,      35 )       2   0.002%  66.644% 
-[      35,      40 )       4   0.004%  66.648% 
-[      40,      45 )       3   0.003%  66.651% 
-[      45,      50 )      50   0.050%  66.701% 
-[      50,      60 )     166   0.166%  66.867% 
-[      60,      70 )      14   0.014%  66.881% 
-[      70,      80 )      14   0.014%  66.895% 
-[      80,      90 )      18   0.018%  66.913% 
-[      90,     100 )      21   0.021%  66.934% 
-[     100,     120 )      61   0.061%  66.995% 
-[     120,     140 )      68   0.068%  67.063% 
-[     140,     160 )      51   0.051%  67.114% 
-[     160,     180 )      35   0.035%  67.149% 
-[     180,     200 )      59   0.059%  67.208% 
-[     200,     250 )      86   0.086%  67.294% 
-[     250,     300 )      50   0.050%  67.344% 
-[     300,     350 )      73   0.073%  67.417% 
-[     350,     400 )     129   0.129%  67.546% 
-[     400,     450 )     198   0.198%  67.744% 
-[     450,     500 )     192   0.192%  67.936% 
-[     500,     600 )    2939   2.939%  70.875% #
-[     600,     700 )    1986   1.986%  72.861% 
-[     700,     800 )     197   0.197%  73.058% 
-[     800,     900 )     136   0.136%  73.194% 
-[     900,    1000 )      83   0.083%  73.277% 
-[    1000,    1200 )    2357   2.357%  75.634% 
-[    1200,    1400 )    5703   5.703%  81.337% #
-[    1400,    1600 )    6440   6.440%  87.777% #
-[    1600,    1800 )    6311   6.311%  94.088% #
-[    1800,    2000 )    4590   4.590%  98.678% #
-[    2000,    2500 )     834   0.834%  99.512% 
-[    2500,    3000 )       5   0.005%  99.517% 
-[    3000,    3500 )       3   0.003%  99.520% 
-[    3500,    4000 )       8   0.008%  99.528% 
-[    4000,    4500 )      95   0.095%  99.623% 
-[    4500,    5000 )     106   0.106%  99.729% 
-[    5000,    6000 )     205   0.205%  99.934% 
-[    6000,    7000 )      55   0.055%  99.989% 
-[    7000,    8000 )       5   0.005%  99.994% 
-[    8000,    9000 )       1   0.001%  99.995% 
-[    9000,   10000 )       1   0.001%  99.996% 
-[   10000,   12000 )       4   0.004% 100.000% 
-&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
+&lt;hr /&gt;
 
-&lt;p&gt;###C 顺序读取测试，readseq 1000W次
-测试前清空Cache。&lt;/p&gt;
+&lt;p&gt;XDES entry被组织在类型为FIL_PAGE_TYPE_XDES的页中。每个类型为FIL_PAGE_TYPE_XDES的页存放256个Xdes entry，即能够描述256个extent区域（总共256MB）。这样每增加一个FIL_PAGE_TYPE_XDES页，就可以管理包括该页在内的连续256MB的空间。Innodb将256MB空间开始的第一个page作为extent描述页。&lt;/p&gt;
 
-&lt;p&gt;批量读取性能接近300MB/S，换算为QPS为100W/S。曾经测试过的Innodb批量读取速度在20W行左右，因为Innodb的Page Size只有16KB，作为存储引擎应对大范围Rang查询性能足够。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;XDES page结构&lt;/strong&gt;&lt;/p&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./db_bench --db=./data_150g --threads=1 --reads=10000000 --num=1000000000 --value_size=300 --use_existing_db=1 --benchmarks=readseq --histogram=1
-LevelDB:    version 1.18
-CPU:        12 * Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz
-CPUCache:   15360 KB
-Keys:       16 bytes each
-Values:     300 bytes each (150 bytes after compression)
-Entries:    1000000000
-RawSize:    301361.1 MB (estimated)
-FileSize:   158309.9 MB (estimated)
-WARNING: Snappy compression is not enabled
-------------------------------------------------
-readseq      :       1.022 micros/op;  295.0 MB/s     1000000 op/s 
-Microseconds per op:
-Count: 10000000  Average: 1.0215  StdDev: 24.70
-Min: 0.0000  Median: 0.8486  Max: 16578.0000
-------------------------------------------------------
-[       0,       1 ) 5892071  58.921%  58.921% ############
-[       1,       2 ) 3369861  33.699%  92.619% #######
-[       2,       3 )  559748   5.597%  98.217% #
-[       3,       4 )  142351   1.424%  99.640% 
-[       4,       5 )    7182   0.072%  99.712% 
-[       5,       6 )    1844   0.018%  99.731% 
-[       6,       7 )     960   0.010%  99.740% 
-[       7,       8 )     133   0.001%  99.742% 
-[       8,       9 )      74   0.001%  99.742% 
-[       9,      10 )      75   0.001%  99.743% 
-[      10,      12 )      99   0.001%  99.744% 
-[      12,      14 )     104   0.001%  99.745% 
-[      14,      16 )      54   0.001%  99.746% 
-[      16,      18 )      30   0.000%  99.746% 
-[      18,      20 )      49   0.000%  99.746% 
-[      20,      25 )      77   0.001%  99.747% 
-[      25,      30 )     111   0.001%  99.748% 
-[      30,      35 )     374   0.004%  99.752% 
-[      35,      40 )    1350   0.014%  99.765% 
-[      40,      45 )    1066   0.011%  99.776% 
-[      45,      50 )     124   0.001%  99.777% 
-[      50,      60 )      26   0.000%  99.778% 
-[      60,      70 )      11   0.000%  99.778% 
-[      70,      80 )     127   0.001%  99.779% 
-[      80,      90 )    1143   0.011%  99.790% 
-[      90,     100 )    2921   0.029%  99.820% 
-[     100,     120 )    8742   0.087%  99.907% 
-[     120,     140 )     233   0.002%  99.909% 
-[     140,     160 )     213   0.002%  99.912% 
-[     160,     180 )     461   0.005%  99.916% 
-[     180,     200 )     532   0.005%  99.921% 
-[     200,     250 )    1578   0.016%  99.937% 
-[     250,     300 )    3183   0.032%  99.969% 
-[     300,     350 )    1149   0.011%  99.981% 
-[     350,     400 )     111   0.001%  99.982% 
-[     400,     450 )      16   0.000%  99.982% 
-[     450,     500 )      10   0.000%  99.982% 
-[     500,     600 )      11   0.000%  99.982% 
-[     600,     700 )      38   0.000%  99.982% 
-[     700,     800 )     641   0.006%  99.989% 
-[     800,     900 )     962   0.010%  99.998% 
-[     900,    1000 )      46   0.000%  99.999% 
-[    1000,    1200 )      18   0.000%  99.999% 
-[    1200,    1400 )      11   0.000%  99.999% 
-[    1400,    1600 )       1   0.000%  99.999% 
-[    1600,    1800 )       2   0.000%  99.999% 
-[    1800,    2000 )       6   0.000%  99.999% 
-[    2000,    2500 )       3   0.000%  99.999% 
-[    2500,    3000 )       4   0.000%  99.999% 
-[    3000,    3500 )       5   0.000%  99.999% 
-[    3500,    4000 )       2   0.000%  99.999% 
-[    4000,    4500 )       3   0.000%  99.999% 
-[    4500,    5000 )       9   0.000% 100.000% 
-[    5000,    6000 )       1   0.000% 100.000% 
-[    8000,    9000 )      10   0.000% 100.000% 
-[    9000,   10000 )      33   0.000% 100.000% 
-[   16000,   18000 )       1   0.000% 100.000% 
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/fsp_hdr_xdes_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
 
-&lt;/code&gt;&lt;/pre&gt;
-&lt;/div&gt;
+&lt;p&gt;在每个FIL_PAGE_TYPE_XDES 类型的page中有5986字节的空间被浪费了，除了xdes entry ,页头和页尾，还有一个112字节的保留区域，叫做表空间头部，其作用是记录整个表空间的使用信息。这个FSP header在每一个FIL_PAGE_TYPE_XDES 类型的页当中都存在，但只有一个表空间的第一个page（0号page)中的内容是有效的。对于其他FIL_PAGE_TYPE_XDES  页，这112字节都被置为0.&lt;/p&gt;
 
-&lt;p&gt;###D，随机覆盖写入 fillrandom
-由于db_bench中没有指定write次数的参数，写入时只能用num参数，和表行数相同，10亿条记录的全量覆盖写入时间非常长，因此需要修改db_bench.cc,增加–writes参数，结果待给出&lt;/p&gt;
+&lt;p&gt;FSP_HDER区域的112个字节内容布局如下&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;fsp header格式&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/fsp_header.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Innodb文件组织中使用的ListNode
+ListNode是一个双向链表，用于管理表空间，处在链表中的可能是page，也可能是inode，或者xde entry。链表base节点主要包含两个部分，分别指向双向链表的头结点和尾节点，此外还包含一个长度字段，其结构如下 
+&lt;img src=&quot;/img/innodb_file_manage_post/list_base_node.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;而list node节点格式如下
+&lt;img src=&quot;/img/innodb_file_manage_post/list_node.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;通过一个页号+页面内偏移，一个List Node可以将同一个表空间内的结构连接起来。&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;FSP HEADER中各字段的意义：&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;意义&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;38&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;SPACE ID&lt;/td&gt;
+      &lt;td&gt;表空间编号&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;unused&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Highest page number&lt;/td&gt;
+      &lt;td&gt;当前表空间最大的页号，表明了该表空间的大小（以页为单位）&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Highest page number initialized&lt;/td&gt;
+      &lt;td&gt;当前初始化完成的页数目。总是小于最大页号&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;FLAGS&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Number of pages used in FREE_FRAG list&lt;/td&gt;
+      &lt;td&gt;碎片extent链表中，已经使用的page的数目，方便计算空闲空间的&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;List base node for FREE LIST&lt;/td&gt;
+      &lt;td&gt;空闲区链表，指向的 是XDES entry&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;List base node  for FREE_FRAG list&lt;/td&gt;
+      &lt;td&gt;碎片区链表，该链表中的extent其中部分页被分配，部分空闲&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;List base node for FULL_FRAG&lt;/td&gt;
+      &lt;td&gt;该区中所有的page，因为不同的目的被分配完毕。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;Next unused Segment ID&lt;/td&gt;
+      &lt;td&gt;该表空间中下一个未使用的段号。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;List base node for FULL_INODES list&lt;/td&gt;
+      &lt;td&gt;索引描述节点页链表，在该链表中的索引描述节点页，其所有描述节点都被使用,该部分后续描述..=====&amp;gt;该list指向的是inode page中的node节点&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;List base node for FREE_INODES list&lt;/td&gt;
+      &lt;td&gt;同上，该链表中的页，只有部分inode描述节点被使用。&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;以上描述了系统表空间和独立表空间共有的一些空间布局信息，在Innodb的文件管理中，系统表空间（ibdata1）中由于存有一些事务，数据字典等相关的元信息，其表空间布局和独立表空间又有所不同。除了头部同样拥有的Extent 描述页，插入缓冲位图页，INODE页之外，系统表空间还有其他一些固定的页，其布局如下&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;共享表空间&lt;/strong&gt;
+&lt;img src=&quot;/img/innodb_file_manage_post/ibdata1_file_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;除了相同的头部3个page之外，系统表空间中，固定的age还有如下5个,其保存的内容分别如下。&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;页号&lt;/th&gt;
+      &lt;th&gt;类型&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;保存的内容&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;3&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_SYS&lt;/td&gt;
+      &lt;td&gt;Insert Buffer Header&lt;/td&gt;
+      &lt;td&gt;插入缓冲统计信息&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYE_INDEX&lt;/td&gt;
+      &lt;td&gt;Insert Buffer root&lt;/td&gt;
+      &lt;td&gt;插入缓冲所用的索引的根节点&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;5&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_TRX_SYS&lt;/td&gt;
+      &lt;td&gt;Transaction System Header&lt;/td&gt;
+      &lt;td&gt;保存事务信息相关的内容，如Transaction ID，用于两阶段提交的 MySQL binlog 信息，doublewrite 区的位置等&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;6&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_SYS&lt;/td&gt;
+      &lt;td&gt;Fisrt Rollback Segment&lt;/td&gt;
+      &lt;td&gt;第一个回滚段页&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;7&lt;/td&gt;
+      &lt;td&gt;FIL_PAGE_TYPE_SYS&lt;/td&gt;
+      &lt;td&gt;Data Dictionary Header&lt;/td&gt;
+      &lt;td&gt;数据字典的头页&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;64~127&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;第一个double write 区&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;128~191&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;第二个double write 区&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;对于独立的表空间，其中只保存了一个表的内容，而表的各个索引将该表空间分为不同的段（segment）。独立表空间的布局如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;独立表空间格式&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/ibd_file_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从page 4开始，依次存放不同索引的根节点，这些根节点的页号保存在系统表空间的数据字典当中。&lt;/p&gt;
+
+&lt;h2 id=&quot;3索引和表空间段组织&quot;&gt;3.索引和表空间段组织&lt;/h2&gt;
+
+&lt;p&gt;Innodb中的page都会归属于不同的段（Segment），不同的Segment存储同一类型的Page, 例如一个索引的信息会保存在两个Segment中，一个叶节点Segment，一个非页节点Segment。而表空间的物理区域，分别按照Page单位和Extent单位分配给不同的Segment。File  Segment的信息记录在FILE_PAGE_INODE类型的页中，表空间中第三个 page是该表空间的第一个FILE_PAGE_INODE，所有的FILE_PAGE_INODE页组织成一个双向链表。一个FILE_PAGE_INODE的布局如下。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;FILE_PAGE_INODE&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/inode_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;FILE_PAGE_INODE页结构比较简单，除去page header tailer,双向链表节点信息之外，剩下的就是总计85个Inode entry，每个表的每个Index会占用两个Segment inode（一个页节点inode，一个非页节点inode）。每个Inode Entry占据192字节。这192字节的内容布局如下：
+ &lt;img src=&quot;/img/innodb_file_manage_post/inode_entry.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;其中各部分的作用如下表所示&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;inode_entry结构&lt;/strong&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;意义&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0&lt;/td&gt;
+      &lt;td&gt;8&lt;/td&gt;
+      &lt;td&gt;FSG ID&lt;/td&gt;
+      &lt;td&gt;该inode指向的File Segment的ID，这里的ID来自 FSP Header中的next unused segment ID&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;8&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Number of Used pages in NOT_FULL list&lt;/td&gt;
+      &lt;td&gt;非空extent链表中，已经使用的page数目&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;12&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;List base node for FREE LIST&lt;/td&gt;
+      &lt;td&gt;空闲extent 链表描述结构，头结点和尾节点指向的是XDES page中的xdes entry，而不是实际的extent位置&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;28&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;List base node for NOT_FULL list&lt;/td&gt;
+      &lt;td&gt;部分使用的extent 链表描述&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;44&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;List base node for FULL list&lt;/td&gt;
+      &lt;td&gt;全部使用的extent链表描述结构&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;60&lt;/td&gt;
+      &lt;td&gt;6&lt;/td&gt;
+      &lt;td&gt;Magic Number&lt;/td&gt;
+      &lt;td&gt;魔术数字，以确认该inode entry是否被初始化&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;64&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;Fragment Array  entry(0~31)&lt;/td&gt;
+      &lt;td&gt;碎片页指针数组，0~31总计32个页号。Innodb初始给一个Fil Segment分配空间时，每次一个页，而这些页的页号就记录在Fragment Array Entry数组中，当该File Segment使用的空间超过32个page时，Innodb将每次至少分配一个extent（64页）。因此每个File Segment的空间都是32个page+完整的extent链表组成。&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;inode管理各个File Segment，File Segment分别属于不同的索引，在每个索引根节点page中，包含了一个FSEG Header，该部分包含了指针指向描述该索引文件组织的Inode entry ，FSEG Header的布局如下&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;fsg header formate&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/fsg_header.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;其中各字段的内容如下表所示&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;解释&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;74&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Leaf Page Inode Space ID&lt;/td&gt;
+      &lt;td&gt;Inode所在的表空间的ID，该字段总是其所在的表空间的值&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;78&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Leaf Page Inode page number&lt;/td&gt;
+      &lt;td&gt;描述叶节点的inode的页号。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;82&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Leaf Pages Inode Offset&lt;/td&gt;
+      &lt;td&gt;Inode  entry在FIL_PAGE_TYPE_INODE页中的偏移&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;84&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Non-leaf Inode Space ID&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;88&lt;/td&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;Non-leaf Inode Page Number&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;92&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Non-leaf Inode Offset&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;结合起来，Innodb管理一个表空间采用如下方式。从数据字典中可以得到一个索引的根节点的页号，通过该页号找到该root page，在root page中的 FSEG header字段，可以找到该索引的Inode信息指针，FSEG Header同时包含了指向叶节点Segment和非页节点Segment的 inode信息的指针。Inode entry中，可以得到该Segment分配得到的 pages和extent。这样Innodb将所有的索引和物理page组织起来。
+&lt;strong&gt;index file segment structure&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/index_file_segment_structure.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;4索引结构&quot;&gt;4.索引结构&lt;/h2&gt;
+
+&lt;p&gt;Innodb中所有的数据Page都被组织在索引当中，每一个表都会有一个主键索引，所有的数据内容都会保存在主键索引的叶子节点中，而对于非主键索引，其叶子节点中保存了主键索引的值。Index page是page的一种，index page中和数据page有着相似的结构，例如包含System Records（包含当前页中数据上界和下界），该page中的索引记录也通过双向链表连接起来，页的尾部也包含了用于加速查找的页字典。其页面布局如下图所示：
+&lt;strong&gt;index overview&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/index_overview.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;除了标准的FIL Header 和FIL Trailer外，其各个部分的内容如下表所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;index overview&lt;/strong&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt; &lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;38&lt;/td&gt;
+      &lt;td&gt;36&lt;/td&gt;
+      &lt;td&gt;Index Header&lt;/td&gt;
+      &lt;td&gt;索引页头，包含索引页和记录的管理信息，下面描述&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;74&lt;/td&gt;
+      &lt;td&gt;24&lt;/td&gt;
+      &lt;td&gt;FSEG Header&lt;/td&gt;
+      &lt;td&gt;在Index的root page中，FSEG包含了指向该索引的叶节点和非叶节点的inode的指针。在非root page中，该段内容填充为0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;94&lt;/td&gt;
+      &lt;td&gt;26&lt;/td&gt;
+      &lt;td&gt;System Records	Innodb 页中的两条系统自带的记录行，固定在此位置，分别代表 infimum 和 supremum记录。在该页的记录链表中，infimu 和supremum分别充当了链表的头结点和尾节点。&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;120&lt;/td&gt;
+      &lt;td&gt;不定&lt;/td&gt;
+      &lt;td&gt;User  Records&lt;/td&gt;
+      &lt;td&gt;索引记录，在page中分布，以指针的形式按key从小到大连接起来。 被删除之后  会连接在空闲区块链表当中&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;不定&lt;/td&gt;
+      &lt;td&gt;Free Space&lt;/td&gt;
+      &lt;td&gt;空闲空间&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;不定&lt;/td&gt;
+      &lt;td&gt;Page Direcory&lt;/td&gt;
+      &lt;td&gt;单位长度为2的整形数组，每个数据元素指向一行在页面中的偏移地址。Page directory从FIL Trailer开始向前生长。每4~8行记录会在Page dicrecotry中有一条记录，形成一个稀疏索引。&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Index Page中第一个重要的字段Index Header其布局如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;index header&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/index_header.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;各个字段的内容如下表所示&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;意义&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;38&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Number of Directory Slots&lt;/td&gt;
+      &lt;td&gt;页稀疏表的长度&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;40&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Heap Top Position&lt;/td&gt;
+      &lt;td&gt;当前页当中free空间的开始地址&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;42&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Number of Heap Records/Formate flag&lt;/td&gt;
+      &lt;td&gt;当前页中所有记录的条数，包括 Infimum和Supemum记录以及被删除记录.该字段的头位bit，是一个标志位，表明当前的页格式是COMPAC还是REDUNDANT&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;44&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Fisrt Garbage record Offset&lt;/td&gt;
+      &lt;td&gt;第一个被删除空间地址偏移，Index page中，被删除的记录空间也以双向链表的形式连接起来&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;46&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Garbage Space&lt;/td&gt;
+      &lt;td&gt;被删除空间占据的大小&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;48&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Laster Insert Postion&lt;/td&gt;
+      &lt;td&gt;上一次插入的该page中的记录的偏移&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;50&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Page Diretion&lt;/td&gt;
+      &lt;td&gt;该页的插入方向，当一个记录被插入是会和Laster Insert postion位置的记录大小作比较，判断其实LEFT RIGHT还是NO_DIRECTION的插入，并记录在该字段中&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;52&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Numbers of Insert in Page Direction&lt;/td&gt;
+      &lt;td&gt;在Page的插入方向上执行的插入次数，注意 每次方向改变时，该值会被清零。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;54&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Number of Records&lt;/td&gt;
+      &lt;td&gt;有效记录的条数（不包括infimum,supremum,deleted records)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;56&lt;/td&gt;
+      &lt;td&gt;8&lt;/td&gt;
+      &lt;td&gt;Maximum Transaction ID&lt;/td&gt;
+      &lt;td&gt;修改该page的最大事务ID&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;64&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Page Level&lt;/td&gt;
+      &lt;td&gt;页所在的层级，叶子节点层级为0，向上一次递增一个层级&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;66&lt;/td&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;Index ID&lt;/td&gt;
+      &lt;td&gt;该Index page所属的索引的ID&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;FSG Header部分包含20字节，在前面（3）部分中已经有解释。
+紧跟着FSG header部分的是System Records部分，包含26个字节。这个部分包含两条系统记录，分别叫做infimum和supremum。分别固定在系统的99字节和112字节的偏移处。
+System Records的布局如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;index system records&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/index_system_records.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;部分几点的解释如下：
+Number Recorders Owned：如果该行记录在page的 page direction 表中，该字段表示包括该记录在内，到表中记录的下一样记录为止，总共有多少条记录。该字段的意义是告诉搜索逻辑
+在通过页表找到该行之后，其后面还有多少行可以通过next record offset指针找到。&lt;/p&gt;
+
+&lt;p&gt;给出了索引页的物理结构之后，一个Index的 leaf  page的逻辑结构如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;btree simplified leaf page&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/btree_simplified_leaf_page.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;注意在leaf Page的 value中保存的是非索引相关的字段信息。对于primary key，该部分包含的是整行数据，而对于secondary key，该部分的value则是主键内容。
+对于一个非叶子节点 ，value部分保存的则是，该行记录对应的叶子节点的page 号，而该行记录的key是其叶子节点中记录的最小的key的内容。如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;btree simplified noleaf page&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/btree_simplified_noleaf_page.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;B+树中所有相同层级（Index header中的page level字段）的节点，通过双向链表连接起来，方便同一级之间的遍历。如下图所示。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;btree simplified level&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/btree_simplified_level.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;对于一个以下列sql创建起来的表：&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-sql&quot; data-lang=&quot;sql&quot;&gt;&lt;span class=&quot;k&quot;&gt;CREATE&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;TABLE&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;INT&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;NOT&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;NULL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;s&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CHAR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;NOT&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;NULL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;PRIMARY&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;KEY&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ENGINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;InnoDB&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;INSERT&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;INTO&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;VALUES&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;&quot;A&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;&quot;B&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;&quot;C&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;其页面结构如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;btree detailed_apge_structure&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/btree_detailed_page_structure.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;5记录行结构barracuda-compact-format&quot;&gt;5.记录行结构（barracuda compact format）&lt;/h2&gt;
+
+&lt;p&gt;Innodb的行主要由列值（Filed）和行记录头部组成。列值按照create table时定义顺序紧凑排列，中间没有分隔，在行记录头部，保存了一些信息，以表明该行相关信息，如各个字段的实际长度，是否被删除，是否是最小行，列数，下一行指针等。需要注意的是在Innodb的格式中，next Record offset指针指向的下一行位置，代表的是该行实际的列值开始的地方，并不包含行头部。如果要得到该行的一些元信息，需要从指针位置向前回溯。由于列值长度的不同，一个行的头部长度也是变长的。一个行的头部布局如下所示，包含6个字节定长部分和变长部分。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;record formate header&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/record_format_header.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;各个字段的内容如下所示&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;相对于列值原点的偏移&lt;/th&gt;
+      &lt;th&gt;长度&lt;/th&gt;
+      &lt;th&gt;内容&lt;/th&gt;
+      &lt;th&gt;解释&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N~&lt;/td&gt;
+      &lt;td&gt;取决于可变长度列的数目&lt;/td&gt;
+      &lt;td&gt;包含每一个可变长度列的长度&lt;/td&gt;
+      &lt;td&gt;一个整形数组，单位长度为一字节或者两字节，取决于最大可变长度的长度，如果没有可变列，该字段为空。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N-5&lt;/td&gt;
+      &lt;td&gt;不定长，正bytes长度&lt;/td&gt;
+      &lt;td&gt;可能为NULL的列的位图，标志该行那些字段为NULL&lt;/td&gt;
+      &lt;td&gt;表定义时，可能为NULL的列的数目决定了段占用的bit数，取整到8，如包含7个可能为NULL的列时，则该字段为一个bytes。如果一个Filed为NULL，它的值将不会在key或者 行额rowdata中出现。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4bits&lt;/td&gt;
+      &lt;td&gt;Info FLags&lt;/td&gt;
+      &lt;td&gt;头两个bit未用，第三那个bit标志该行是否deleted，第四个bit标志该记录是否是飞叶子节点一层中的最小记录&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;4bit&lt;/td&gt;
+      &lt;td&gt;Number of Records Owned&lt;/td&gt;
+      &lt;td&gt;该行拥有的记录数目，用于page directory的查询，值未4~8。对于Infimum记录，最小为1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;13bits&lt;/td&gt;
+      &lt;td&gt;Order&lt;/td&gt;
+      &lt;td&gt;插入顺序编号，Infimum记录为0，Supremum为1 ，用户记录从2开始编号。&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;3bits&lt;/td&gt;
+      &lt;td&gt;Record Type&lt;/td&gt;
+      &lt;td&gt;记录类型，目前只有四种 conventinal(0), node pointer(1) infimum(2) supremum (3）&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td&gt;2bytes&lt;/td&gt;
+      &lt;td&gt;Next redcords&lt;/td&gt;
+      &lt;td&gt;一个pge中所有有效的行记录按照key递增循序连成一个单项链表，该字段指向下一个记录的 远点位置。&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Innodb中的行，除了记录自己的内容外，还会记录一些额外的事务相关的字段信息。例如事务ID，回滚段指针等。对一个聚簇索引中的叶子节点。其页面布局如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;cluster key leaf pages&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/clustered_key_leaf_pages.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从记录原点开始， 最开始的三个字段分别是聚簇索引值，事务ID，回滚段指针。接下来才是实际的列内容。在Innodb中，primary key可能是一个多列索引，由于其组合不可能是一个NULL的值，Innodb简单的将他们按照内部存储的原始自己拼接在一起，形成一个大的字节串。回滚段指针指向的是回滚段中记录修改该记录的事务的回滚信息。该7字节分成四部分  （1）1bit代表是否是插入（2）7bit 回滚段的segment ID，(3)4字节的回滚段页号 （4） 2字节的页内偏移。&lt;/p&gt;
+
+&lt;p&gt;聚簇索引的非叶子节点中除了key外，没有列值。其行记录布局如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;cluster key nonleaf pages&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/clustered_key_nonleaf_pages.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;对于非聚簇索引，其记录中保存的是聚簇索引的值，在Innodb中，如果一个Secondary key和一个primary key有重合的列，则在Secondary key的记录中，有重合的列只会记录一次，记在Secondary key Fileds中，在Cluster key Filed中则不会记录。一个Secondary key的叶子 page布局如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;secondary key leaf pages&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/img/innodb_file_manage_post/secondary_key_leaf_pages.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;非叶子节点的布局如下，需要注意的是在Secondary key的非叶子节点中，聚簇索引包含在记录中，作为key的一部分，和Secondary key组合在一起，保证唯一性。这样在Secondary key中，非叶子节点比叶子节点多了四个字节的page number。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;secondary key nonleaf pages&lt;/strong&gt;
+ &lt;img src=&quot;/img/innodb_file_manage_post/secondary_key_nonleaf_pages.png&quot; alt=&quot;innodb file header/trailer&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;6-数据字典data-dictinary&quot;&gt;6. 数据字典Data Dictinary&lt;/h2&gt;
+
+&lt;p&gt;该部分未完待续。&lt;/p&gt;
 
 </description>
-        <pubDate>Sat, 21 May 2016 01:09:37 +0800</pubDate>
-        <link>http://luckywhu.github.io/leveldb/test/2016/05/21/leveldb-perf-test.html</link>
-        <guid isPermaLink="true">http://luckywhu.github.io/leveldb/test/2016/05/21/leveldb-perf-test.html</guid>
+        <pubDate>Mon, 27 Jun 2016 01:09:37 +0800</pubDate>
+        <link>http://localhost:4000/mysql/innodb/2016/06/27/innodb-file_manage.html</link>
+        <guid isPermaLink="true">http://localhost:4000/mysql/innodb/2016/06/27/innodb-file_manage.html</guid>
         
         
-        <category>leveldb</category>
+        <category>mysql</category>
         
-        <category>test</category>
+        <category>Innodb</category>
         
       </item>
     

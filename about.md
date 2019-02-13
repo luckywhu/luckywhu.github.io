@@ -6,7 +6,8 @@ permalink: /about/
 
 ## 个人简介
 
-- 就职于百度DBA团队，MySQL kernel小组，从事MySQL内核优化及数据库相关组件开发。
+- 就职于阿里巴巴数据库事业部，数据库内核团队，从事高性能存储引擎以及基于新硬件的数据库系统
+- 曾职于百度DBA团队，MySQL kernel小组，从事MySQL内核优化及数据库相关组件开发。
 - 专注于关系数据库，分布式存储方向的开发工作。
 - 目前阶段主要编程语言C/C++,Java,Shell，写过Perl,Python,C#,Groovy。。。。。
 

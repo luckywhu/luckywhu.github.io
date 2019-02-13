@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Innodb物理文件格式综述</title>
+  <meta name="description" content="关于该综述">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://localhost:4000/mysql/innodb/2016/06/27/innodb-file_manage.html">
+  <link rel="alternate" type="application/rss+xml" title="猴子爱吃鱼的Blog" href="http://localhost:4000/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">猴子爱吃鱼的Blog</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+<header class="post-header">
+<h1 class="post-title" itemprop="name headline">Innodb物理文件格式综述</h1>
+<p class="post-meta"><time datetime="2016-06-27T01:09:37+08:00" itemprop="datePublished">Jun 27, 2016</time></p>
+</header>
+
+<div class="post-content" itemprop="articleBody">
+        <h3 id="关于该综述">关于该综述</h3>
+
+<p>关于Innodb物理文件格式的文献综述. 基本资料来源于 <a href="https://blog.jcole.us/">Jeremy Cole</a> 的博客以及 mysql5.1.63 的代码, 文章中的画图全部来自Jeremy Cole如下的两篇博客文章：</p>
+
+<ol>
+  <li><a href="https://blog.jcole.us/2013/01/03/the-basics-of-innodb-space-file-layout/">The basics of InnoDB space file layout</a></li>
+  <li><a href="https://blog.jcole.us/2013/01/07/the-physical-structure-of-innodb-index-pages/">The physical structure of InnoDB index pages</a></li>
+</ol>
+
+<p>我按照Jeremy Cole博客的材料，对照阅读mysql源代码，然后按照从宏观到微观的形式重新组织了一下材料。该篇综述覆盖了Innodb物理文件组织的大部分知识点，剩下的第六章是Innodb数据字典格式的内容，留待以后补充。</p>
+
+<p>综述写于2013年12月份，一直放在everynote里面没发表，现在拿出来，用marke down格式重写了一下。</p>
+
+<h2 id="1物理页面结构">1.物理页面结构</h2>
+
+<p>Innodb通过表空间来管理所有的物理文件，当使用共享表空间时，表空间只有一个，但可能包含多个物理文件，这些物理文件组成一个表空间，启用独立表空间时，除了共享表空间之外，每个表读都独享一个物理文件，但独立表空间只能包含一个物理文件。Innnodb使用一个4字节的整数对物理表空间进行编号，系统表空间作为第一个文件编号为0，其他表空间使用的编号依次递增。</p>
+
+<p>  所有的表空间都会划分成UNIV_PAGE_SIZE 大小的页，这个大小是一个编译时确定的长度，默认是16K（2*8192）字节。页是innodb文件分配的基本单位。页可以组成区（extent），段等。
+每个页初始化之后，元信息占据头部38字节和尾部8字节。 剩下的16384-46=16338字节存储数据内容。如下图所示</p>
+
+<p><img src="/img/innodb_file_manage_post/innodb_file_page_structure.jpg" alt="innodb page manage" /></p>
+
+<p>头部38字节和尾部8字节的内容定义如下：
+<img src="/img/innodb_file_manage_post/innodb_file_header_trailer.png" alt="innodb file header/trailer" /></p>
+
+<p>该部分的代码定义在storage/innobase/include/Fil0fil.h文件中。其中各个字段的含义如下表所示</p>
+
+<p><strong>物理页内容</strong></p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left">相对头部偏移</th>
+      <th style="text-align: left">长度（字节）</th>
+      <th style="text-align: left">内容</th>
+      <th style="text-align: left">解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left">0</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">checksum</td>
+      <td style="text-align: left">该页的校验和</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">Page Number</td>
+      <td style="text-align: left">页号，表空间中的所有页都会进行编号，是一个32位整数，总偏移0开始，依次递增。</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">8</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">Previous page</td>
+      <td style="text-align: left">在一个连成双向链表的页组织结构中，指向其前一页的地址。这些页物理上可能不是相邻的。靠指针链接起来</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">12</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">Next page</td>
+      <td style="text-align: left">同Previous page，指向后一页的地址。</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">16</td>
+      <td style="text-align: left">8</td>
+      <td style="text-align: left">Last LSN</td>
+      <td style="text-align: left">最后一次更新本页的事务日志编号，在Innodb的事务系统中有用</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">24</td>
+      <td style="text-align: left">2</td>
+      <td style="text-align: left">Page Type</td>
+      <td style="text-align: left">页类型，下表解释</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">26</td>
+      <td style="text-align: left">8</td>
+      <td style="text-align: left">Flush LSN</td>
+      <td style="text-align: left">该数据库最新flush的LSN，注意这是整个数据库的checkpoint点，只在系统表空间的第一个page中有效，在其他所有的page中是都填0</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">34</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">Space ID</td>
+      <td style="text-align: left">表空间编号</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">16376</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">Old_style checksum</td>
+      <td style="text-align: left">老式checksum，作用同头部4字节。后续可能废弃。</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">16484</td>
+      <td style="text-align: left">4</td>
+      <td style="text-align: left">LSN的低4字节</td>
+      <td style="text-align: left">同Last LSN的低4字节</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>Innodb的表page类型总共有如下11种，如下表所示</p>
+
+<p><strong>innodb的page类型</strong></p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>类型</th>
+      <th>数字编号</th>
+      <th>意义</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>FIL_PAGE_INDEX</td>
+      <td>17855</td>
+      <td>索引页</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_UNDO_LOG</td>
+      <td>2</td>
+      <td>undo页</td>
+    </tr>
+    <tr>
+      <td>FILE_PAGE_INODE</td>
+      <td>3</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_IBUF_REEE_LIST</td>
+      <td>4</td>
+      <td>插入缓冲空闲页链表</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_ALLOCATED</td>
+      <td>0</td>
+      <td>新分配的页</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_IBUF_BITMAP</td>
+      <td>5</td>
+      <td>插入缓冲位图</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_SYS</td>
+      <td>6</td>
+      <td>系统页（如数据字典等）</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_TRX_SYS</td>
+      <td>7</td>
+      <td>事务系统页</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_FSP_HDR</td>
+      <td>8</td>
+      <td>表空间头页，每个表空间中的第一个页</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_XDES</td>
+      <td>9</td>
+      <td>区描述页，表空间中，每16384个page需要一个区描述页，描述256MB大小的extent的使用情况</td>
+    </tr>
+    <tr>
+      <td>FIL_PAGE_TYPE_BLOB</td>
+      <td>10</td>
+      <td>未压缩的BLOB页</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="2表空间组织">2.表空间组织</h2>
+
+<p>Innodb中文件分两种类型，日志文件和数据文件，数据文件由表空间组成，而表空间则由不同的页组成。启用innodb_file_per_table之后，表空间分为两种：系统表空间（编号0）和独立表空间。无论哪种表空间其大的架构都如下图所示。</p>
+
+<p><img src="/img/innodb_file_manage_post/space_file_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>Innodb物理文件增长以extent为单位，每个extent为1MB（64个page）。对于每一个extent，innodb使用40字节的空间（XDES entry）来描述该extent中的页面使用情况。</p>
+
+<p><strong>XDES entry</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/xdes_entry.png" alt="innodb file header/trailer" /></p>
+
+<p><strong>xdes entry各个字段含义</strong></p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>释义</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>N+0</td>
+      <td>8</td>
+      <td>File Segment ID</td>
+      <td>该extent所属的段编号，文件段用来区分不同的内容，使用数字编号，例如一个表的索引叶子节点和非叶子节点分为属不同的段。</td>
+    </tr>
+    <tr>
+      <td>N+8</td>
+      <td>12</td>
+      <td>List node for XDES List</td>
+      <td>一个双向链表结构，指明在该extent所属的段的extent entry链表中，前向节点页和后向节点的位置。</td>
+    </tr>
+    <tr>
+      <td>N+20</td>
+      <td>4</td>
+      <td>STAT</td>
+      <td>该extent的状态，有四种类型FREE，FREE_FRAG， FULL_FRAG，FSEG。 前三种类型表明其属于该表空间中同类型的区域。而FSEG表明该page已经被分配，其File Segment ID指明了其所属的段编号</td>
+    </tr>
+    <tr>
+      <td>N+24</td>
+      <td>16</td>
+      <td>Page Stat Bitmap</td>
+      <td>页位图，每2个bit描述一个页。第一个比特表示该页是否是空闲，第二个bit表示该页是否有更新没有被刷盘，目前第二个bit保留未用。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>XDES entry被组织在类型为FIL_PAGE_TYPE_XDES的页中。每个类型为FIL_PAGE_TYPE_XDES的页存放256个Xdes entry，即能够描述256个extent区域（总共256MB）。这样每增加一个FIL_PAGE_TYPE_XDES页，就可以管理包括该页在内的连续256MB的空间。Innodb将256MB空间开始的第一个page作为extent描述页。</p>
+
+<p><strong>XDES page结构</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/fsp_hdr_xdes_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>在每个FIL_PAGE_TYPE_XDES 类型的page中有5986字节的空间被浪费了，除了xdes entry ,页头和页尾，还有一个112字节的保留区域，叫做表空间头部，其作用是记录整个表空间的使用信息。这个FSP header在每一个FIL_PAGE_TYPE_XDES 类型的页当中都存在，但只有一个表空间的第一个page（0号page)中的内容是有效的。对于其他FIL_PAGE_TYPE_XDES  页，这112字节都被置为0.</p>
+
+<p>FSP_HDER区域的112个字节内容布局如下</p>
+
+<p><strong>fsp header格式</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/fsp_header.png" alt="innodb file header/trailer" /></p>
+
+<hr />
+
+<p>Innodb文件组织中使用的ListNode
+ListNode是一个双向链表，用于管理表空间，处在链表中的可能是page，也可能是inode，或者xde entry。链表base节点主要包含两个部分，分别指向双向链表的头结点和尾节点，此外还包含一个长度字段，其结构如下 
+<img src="/img/innodb_file_manage_post/list_base_node.png" alt="innodb file header/trailer" /></p>
+
+<p>而list node节点格式如下
+<img src="/img/innodb_file_manage_post/list_node.png" alt="innodb file header/trailer" /></p>
+
+<p>通过一个页号+页面内偏移，一个List Node可以将同一个表空间内的结构连接起来。</p>
+
+<hr />
+
+<p>FSP HEADER中各字段的意义：</p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>意义</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>38</td>
+      <td>4</td>
+      <td>SPACE ID</td>
+      <td>表空间编号</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4</td>
+      <td>unused</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4</td>
+      <td>Highest page number</td>
+      <td>当前表空间最大的页号，表明了该表空间的大小（以页为单位）</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4</td>
+      <td>Highest page number initialized</td>
+      <td>当前初始化完成的页数目。总是小于最大页号</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4</td>
+      <td>FLAGS</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4</td>
+      <td>Number of pages used in FREE_FRAG list</td>
+      <td>碎片extent链表中，已经使用的page的数目，方便计算空闲空间的</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>List base node for FREE LIST</td>
+      <td>空闲区链表，指向的 是XDES entry</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>List base node  for FREE_FRAG list</td>
+      <td>碎片区链表，该链表中的extent其中部分页被分配，部分空闲</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>List base node for FULL_FRAG</td>
+      <td>该区中所有的page，因为不同的目的被分配完毕。</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>Next unused Segment ID</td>
+      <td>该表空间中下一个未使用的段号。</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>List base node for FULL_INODES list</td>
+      <td>索引描述节点页链表，在该链表中的索引描述节点页，其所有描述节点都被使用,该部分后续描述..=====&gt;该list指向的是inode page中的node节点</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td>List base node for FREE_INODES list</td>
+      <td>同上，该链表中的页，只有部分inode描述节点被使用。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>以上描述了系统表空间和独立表空间共有的一些空间布局信息，在Innodb的文件管理中，系统表空间（ibdata1）中由于存有一些事务，数据字典等相关的元信息，其表空间布局和独立表空间又有所不同。除了头部同样拥有的Extent 描述页，插入缓冲位图页，INODE页之外，系统表空间还有其他一些固定的页，其布局如下</p>
+
+<p><strong>共享表空间</strong>
+<img src="/img/innodb_file_manage_post/ibdata1_file_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>除了相同的头部3个page之外，系统表空间中，固定的age还有如下5个,其保存的内容分别如下。</p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>页号</th>
+      <th>类型</th>
+      <th>内容</th>
+      <th>保存的内容</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>3</td>
+      <td>FIL_PAGE_TYPE_SYS</td>
+      <td>Insert Buffer Header</td>
+      <td>插入缓冲统计信息</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>FIL_PAGE_TYE_INDEX</td>
+      <td>Insert Buffer root</td>
+      <td>插入缓冲所用的索引的根节点</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>FIL_PAGE_TYPE_TRX_SYS</td>
+      <td>Transaction System Header</td>
+      <td>保存事务信息相关的内容，如Transaction ID，用于两阶段提交的 MySQL binlog 信息，doublewrite 区的位置等</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>FIL_PAGE_TYPE_SYS</td>
+      <td>Fisrt Rollback Segment</td>
+      <td>第一个回滚段页</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>FIL_PAGE_TYPE_SYS</td>
+      <td>Data Dictionary Header</td>
+      <td>数据字典的头页</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>64~127</td>
+      <td> </td>
+      <td>第一个double write 区</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>128~191</td>
+      <td> </td>
+      <td>第二个double write 区</td>
+      <td> </td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>对于独立的表空间，其中只保存了一个表的内容，而表的各个索引将该表空间分为不同的段（segment）。独立表空间的布局如下：</p>
+
+<p><strong>独立表空间格式</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/ibd_file_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>从page 4开始，依次存放不同索引的根节点，这些根节点的页号保存在系统表空间的数据字典当中。</p>
+
+<h2 id="3索引和表空间段组织">3.索引和表空间段组织</h2>
+
+<p>Innodb中的page都会归属于不同的段（Segment），不同的Segment存储同一类型的Page, 例如一个索引的信息会保存在两个Segment中，一个叶节点Segment，一个非页节点Segment。而表空间的物理区域，分别按照Page单位和Extent单位分配给不同的Segment。File  Segment的信息记录在FILE_PAGE_INODE类型的页中，表空间中第三个 page是该表空间的第一个FILE_PAGE_INODE，所有的FILE_PAGE_INODE页组织成一个双向链表。一个FILE_PAGE_INODE的布局如下。</p>
+
+<p><strong>FILE_PAGE_INODE</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/inode_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>FILE_PAGE_INODE页结构比较简单，除去page header tailer,双向链表节点信息之外，剩下的就是总计85个Inode entry，每个表的每个Index会占用两个Segment inode（一个页节点inode，一个非页节点inode）。每个Inode Entry占据192字节。这192字节的内容布局如下：
+ <img src="/img/innodb_file_manage_post/inode_entry.png" alt="innodb file header/trailer" /></p>
+
+<p>其中各部分的作用如下表所示</p>
+
+<p><strong>inode_entry结构</strong></p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>意义</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>8</td>
+      <td>FSG ID</td>
+      <td>该inode指向的File Segment的ID，这里的ID来自 FSP Header中的next unused segment ID</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>4</td>
+      <td>Number of Used pages in NOT_FULL list</td>
+      <td>非空extent链表中，已经使用的page数目</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>16</td>
+      <td>List base node for FREE LIST</td>
+      <td>空闲extent 链表描述结构，头结点和尾节点指向的是XDES page中的xdes entry，而不是实际的extent位置</td>
+    </tr>
+    <tr>
+      <td>28</td>
+      <td>16</td>
+      <td>List base node for NOT_FULL list</td>
+      <td>部分使用的extent 链表描述</td>
+    </tr>
+    <tr>
+      <td>44</td>
+      <td>16</td>
+      <td>List base node for FULL list</td>
+      <td>全部使用的extent链表描述结构</td>
+    </tr>
+    <tr>
+      <td>60</td>
+      <td>6</td>
+      <td>Magic Number</td>
+      <td>魔术数字，以确认该inode entry是否被初始化</td>
+    </tr>
+    <tr>
+      <td>64</td>
+      <td> </td>
+      <td>Fragment Array  entry(0~31)</td>
+      <td>碎片页指针数组，0~31总计32个页号。Innodb初始给一个Fil Segment分配空间时，每次一个页，而这些页的页号就记录在Fragment Array Entry数组中，当该File Segment使用的空间超过32个page时，Innodb将每次至少分配一个extent（64页）。因此每个File Segment的空间都是32个page+完整的extent链表组成。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>inode管理各个File Segment，File Segment分别属于不同的索引，在每个索引根节点page中，包含了一个FSEG Header，该部分包含了指针指向描述该索引文件组织的Inode entry ，FSEG Header的布局如下</p>
+
+<p><strong>fsg header formate</strong>
+ <img src="/img/innodb_file_manage_post/fsg_header.png" alt="innodb file header/trailer" /></p>
+
+<p>其中各字段的内容如下表所示</p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>74</td>
+      <td>4</td>
+      <td>Leaf Page Inode Space ID</td>
+      <td>Inode所在的表空间的ID，该字段总是其所在的表空间的值</td>
+    </tr>
+    <tr>
+      <td>78</td>
+      <td>4</td>
+      <td>Leaf Page Inode page number</td>
+      <td>描述叶节点的inode的页号。</td>
+    </tr>
+    <tr>
+      <td>82</td>
+      <td>2</td>
+      <td>Leaf Pages Inode Offset</td>
+      <td>Inode  entry在FIL_PAGE_TYPE_INODE页中的偏移</td>
+    </tr>
+    <tr>
+      <td>84</td>
+      <td>4</td>
+      <td>Non-leaf Inode Space ID</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>88</td>
+      <td>4</td>
+      <td>Non-leaf Inode Page Number</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>92</td>
+      <td>2</td>
+      <td>Non-leaf Inode Offset</td>
+      <td> </td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>结合起来，Innodb管理一个表空间采用如下方式。从数据字典中可以得到一个索引的根节点的页号，通过该页号找到该root page，在root page中的 FSEG header字段，可以找到该索引的Inode信息指针，FSEG Header同时包含了指向叶节点Segment和非页节点Segment的 inode信息的指针。Inode entry中，可以得到该Segment分配得到的 pages和extent。这样Innodb将所有的索引和物理page组织起来。
+<strong>index file segment structure</strong>
+ <img src="/img/innodb_file_manage_post/index_file_segment_structure.png" alt="innodb file header/trailer" /></p>
+
+<h2 id="4索引结构">4.索引结构</h2>
+
+<p>Innodb中所有的数据Page都被组织在索引当中，每一个表都会有一个主键索引，所有的数据内容都会保存在主键索引的叶子节点中，而对于非主键索引，其叶子节点中保存了主键索引的值。Index page是page的一种，index page中和数据page有着相似的结构，例如包含System Records（包含当前页中数据上界和下界），该page中的索引记录也通过双向链表连接起来，页的尾部也包含了用于加速查找的页字典。其页面布局如下图所示：
+<strong>index overview</strong>
+ <img src="/img/innodb_file_manage_post/index_overview.png" alt="innodb file header/trailer" /></p>
+
+<p>除了标准的FIL Header 和FIL Trailer外，其各个部分的内容如下表所示：</p>
+
+<p><strong>index overview</strong></p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th> </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>38</td>
+      <td>36</td>
+      <td>Index Header</td>
+      <td>索引页头，包含索引页和记录的管理信息，下面描述</td>
+    </tr>
+    <tr>
+      <td>74</td>
+      <td>24</td>
+      <td>FSEG Header</td>
+      <td>在Index的root page中，FSEG包含了指向该索引的叶节点和非叶节点的inode的指针。在非root page中，该段内容填充为0</td>
+    </tr>
+    <tr>
+      <td>94</td>
+      <td>26</td>
+      <td>System Records	Innodb 页中的两条系统自带的记录行，固定在此位置，分别代表 infimum 和 supremum记录。在该页的记录链表中，infimu 和supremum分别充当了链表的头结点和尾节点。</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>120</td>
+      <td>不定</td>
+      <td>User  Records</td>
+      <td>索引记录，在page中分布，以指针的形式按key从小到大连接起来。 被删除之后  会连接在空闲区块链表当中</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>不定</td>
+      <td>Free Space</td>
+      <td>空闲空间</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>不定</td>
+      <td>Page Direcory</td>
+      <td>单位长度为2的整形数组，每个数据元素指向一行在页面中的偏移地址。Page directory从FIL Trailer开始向前生长。每4~8行记录会在Page dicrecotry中有一条记录，形成一个稀疏索引。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>Index Page中第一个重要的字段Index Header其布局如下：</p>
+
+<p><strong>index header</strong>
+ <img src="/img/innodb_file_manage_post/index_header.png" alt="innodb file header/trailer" /></p>
+
+<p>各个字段的内容如下表所示</p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>意义</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>38</td>
+      <td>2</td>
+      <td>Number of Directory Slots</td>
+      <td>页稀疏表的长度</td>
+    </tr>
+    <tr>
+      <td>40</td>
+      <td>2</td>
+      <td>Heap Top Position</td>
+      <td>当前页当中free空间的开始地址</td>
+    </tr>
+    <tr>
+      <td>42</td>
+      <td>2</td>
+      <td>Number of Heap Records/Formate flag</td>
+      <td>当前页中所有记录的条数，包括 Infimum和Supemum记录以及被删除记录.该字段的头位bit，是一个标志位，表明当前的页格式是COMPAC还是REDUNDANT</td>
+    </tr>
+    <tr>
+      <td>44</td>
+      <td>2</td>
+      <td>Fisrt Garbage record Offset</td>
+      <td>第一个被删除空间地址偏移，Index page中，被删除的记录空间也以双向链表的形式连接起来</td>
+    </tr>
+    <tr>
+      <td>46</td>
+      <td>2</td>
+      <td>Garbage Space</td>
+      <td>被删除空间占据的大小</td>
+    </tr>
+    <tr>
+      <td>48</td>
+      <td>2</td>
+      <td>Laster Insert Postion</td>
+      <td>上一次插入的该page中的记录的偏移</td>
+    </tr>
+    <tr>
+      <td>50</td>
+      <td>2</td>
+      <td>Page Diretion</td>
+      <td>该页的插入方向，当一个记录被插入是会和Laster Insert postion位置的记录大小作比较，判断其实LEFT RIGHT还是NO_DIRECTION的插入，并记录在该字段中</td>
+    </tr>
+    <tr>
+      <td>52</td>
+      <td>2</td>
+      <td>Numbers of Insert in Page Direction</td>
+      <td>在Page的插入方向上执行的插入次数，注意 每次方向改变时，该值会被清零。</td>
+    </tr>
+    <tr>
+      <td>54</td>
+      <td>2</td>
+      <td>Number of Records</td>
+      <td>有效记录的条数（不包括infimum,supremum,deleted records)</td>
+    </tr>
+    <tr>
+      <td>56</td>
+      <td>8</td>
+      <td>Maximum Transaction ID</td>
+      <td>修改该page的最大事务ID</td>
+    </tr>
+    <tr>
+      <td>64</td>
+      <td>2</td>
+      <td>Page Level</td>
+      <td>页所在的层级，叶子节点层级为0，向上一次递增一个层级</td>
+    </tr>
+    <tr>
+      <td>66</td>
+      <td>2</td>
+      <td>Index ID</td>
+      <td>该Index page所属的索引的ID</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>FSG Header部分包含20字节，在前面（3）部分中已经有解释。
+紧跟着FSG header部分的是System Records部分，包含26个字节。这个部分包含两条系统记录，分别叫做infimum和supremum。分别固定在系统的99字节和112字节的偏移处。
+System Records的布局如下所示：</p>
+
+<p><strong>index system records</strong>
+ <img src="/img/innodb_file_manage_post/index_system_records.png" alt="innodb file header/trailer" /></p>
+
+<p>部分几点的解释如下：
+Number Recorders Owned：如果该行记录在page的 page direction 表中，该字段表示包括该记录在内，到表中记录的下一样记录为止，总共有多少条记录。该字段的意义是告诉搜索逻辑
+在通过页表找到该行之后，其后面还有多少行可以通过next record offset指针找到。</p>
+
+<p>给出了索引页的物理结构之后，一个Index的 leaf  page的逻辑结构如下图所示：</p>
+
+<p><strong>btree simplified leaf page</strong>
+ <img src="/img/innodb_file_manage_post/btree_simplified_leaf_page.png" alt="innodb file header/trailer" /></p>
+
+<p>注意在leaf Page的 value中保存的是非索引相关的字段信息。对于primary key，该部分包含的是整行数据，而对于secondary key，该部分的value则是主键内容。
+对于一个非叶子节点 ，value部分保存的则是，该行记录对应的叶子节点的page 号，而该行记录的key是其叶子节点中记录的最小的key的内容。如下图所示：</p>
+
+<p><strong>btree simplified noleaf page</strong>
+ <img src="/img/innodb_file_manage_post/btree_simplified_noleaf_page.png" alt="innodb file header/trailer" /></p>
+
+<p>B+树中所有相同层级（Index header中的page level字段）的节点，通过双向链表连接起来，方便同一级之间的遍历。如下图所示。</p>
+
+<p><strong>btree simplified level</strong>
+ <img src="/img/innodb_file_manage_post/btree_simplified_level.png" alt="innodb file header/trailer" /></p>
+
+<p>对于一个以下列sql创建起来的表：</p>
+
+<figure class="highlight"><pre><code class="language-sql" data-lang="sql"><span class="k">CREATE</span> <span class="k">TABLE</span> <span class="n">t</span> <span class="p">(</span>
+  <span class="n">i</span> <span class="n">INT</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+  <span class="n">s</span> <span class="n">CHAR</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span> <span class="k">NOT</span> <span class="k">NULL</span><span class="p">,</span>
+  <span class="k">PRIMARY</span> <span class="k">KEY</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="p">)</span> <span class="n">ENGINE</span><span class="o">=</span><span class="n">InnoDB</span><span class="p">;</span>
+<span class="k">INSERT</span> <span class="k">INTO</span> <span class="n">t</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">VALUES</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nv">"A"</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nv">"B"</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="nv">"C"</span><span class="p">);</span></code></pre></figure>
+
+<p>其页面结构如下图所示：</p>
+
+<p><strong>btree detailed_apge_structure</strong>
+ <img src="/img/innodb_file_manage_post/btree_detailed_page_structure.png" alt="innodb file header/trailer" /></p>
+
+<h2 id="5记录行结构barracuda-compact-format">5.记录行结构（barracuda compact format）</h2>
+
+<p>Innodb的行主要由列值（Filed）和行记录头部组成。列值按照create table时定义顺序紧凑排列，中间没有分隔，在行记录头部，保存了一些信息，以表明该行相关信息，如各个字段的实际长度，是否被删除，是否是最小行，列数，下一行指针等。需要注意的是在Innodb的格式中，next Record offset指针指向的下一行位置，代表的是该行实际的列值开始的地方，并不包含行头部。如果要得到该行的一些元信息，需要从指针位置向前回溯。由于列值长度的不同，一个行的头部长度也是变长的。一个行的头部布局如下所示，包含6个字节定长部分和变长部分。</p>
+
+<p><strong>record formate header</strong>
+ <img src="/img/innodb_file_manage_post/record_format_header.png" alt="innodb file header/trailer" /></p>
+
+<p>各个字段的内容如下所示</p>
+
+<hr />
+
+<table>
+  <thead>
+    <tr>
+      <th>相对于列值原点的偏移</th>
+      <th>长度</th>
+      <th>内容</th>
+      <th>解释</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>N~</td>
+      <td>取决于可变长度列的数目</td>
+      <td>包含每一个可变长度列的长度</td>
+      <td>一个整形数组，单位长度为一字节或者两字节，取决于最大可变长度的长度，如果没有可变列，该字段为空。</td>
+    </tr>
+    <tr>
+      <td>N-5</td>
+      <td>不定长，正bytes长度</td>
+      <td>可能为NULL的列的位图，标志该行那些字段为NULL</td>
+      <td>表定义时，可能为NULL的列的数目决定了段占用的bit数，取整到8，如包含7个可能为NULL的列时，则该字段为一个bytes。如果一个Filed为NULL，它的值将不会在key或者 行额rowdata中出现。</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4bits</td>
+      <td>Info FLags</td>
+      <td>头两个bit未用，第三那个bit标志该行是否deleted，第四个bit标志该记录是否是飞叶子节点一层中的最小记录</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>4bit</td>
+      <td>Number of Records Owned</td>
+      <td>该行拥有的记录数目，用于page directory的查询，值未4~8。对于Infimum记录，最小为1</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>13bits</td>
+      <td>Order</td>
+      <td>插入顺序编号，Infimum记录为0，Supremum为1 ，用户记录从2开始编号。</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>3bits</td>
+      <td>Record Type</td>
+      <td>记录类型，目前只有四种 conventinal(0), node pointer(1) infimum(2) supremum (3）</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td>2bytes</td>
+      <td>Next redcords</td>
+      <td>一个pge中所有有效的行记录按照key递增循序连成一个单项链表，该字段指向下一个记录的 远点位置。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<p>Innodb中的行，除了记录自己的内容外，还会记录一些额外的事务相关的字段信息。例如事务ID，回滚段指针等。对一个聚簇索引中的叶子节点。其页面布局如下：</p>
+
+<p><strong>cluster key leaf pages</strong>
+ <img src="/img/innodb_file_manage_post/clustered_key_leaf_pages.png" alt="innodb file header/trailer" /></p>
+
+<p>从记录原点开始， 最开始的三个字段分别是聚簇索引值，事务ID，回滚段指针。接下来才是实际的列内容。在Innodb中，primary key可能是一个多列索引，由于其组合不可能是一个NULL的值，Innodb简单的将他们按照内部存储的原始自己拼接在一起，形成一个大的字节串。回滚段指针指向的是回滚段中记录修改该记录的事务的回滚信息。该7字节分成四部分  （1）1bit代表是否是插入（2）7bit 回滚段的segment ID，(3)4字节的回滚段页号 （4） 2字节的页内偏移。</p>
+
+<p>聚簇索引的非叶子节点中除了key外，没有列值。其行记录布局如下：</p>
+
+<p><strong>cluster key nonleaf pages</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/clustered_key_nonleaf_pages.png" alt="innodb file header/trailer" /></p>
+
+<p>对于非聚簇索引，其记录中保存的是聚簇索引的值，在Innodb中，如果一个Secondary key和一个primary key有重合的列，则在Secondary key的记录中，有重合的列只会记录一次，记在Secondary key Fileds中，在Cluster key Filed中则不会记录。一个Secondary key的叶子 page布局如下：</p>
+
+<p><strong>secondary key leaf pages</strong></p>
+
+<p><img src="/img/innodb_file_manage_post/secondary_key_leaf_pages.png" alt="innodb file header/trailer" /></p>
+
+<p>非叶子节点的布局如下，需要注意的是在Secondary key的非叶子节点中，聚簇索引包含在记录中，作为key的一部分，和Secondary key组合在一起，保证唯一性。这样在Secondary key中，非叶子节点比叶子节点多了四个字节的page number。</p>
+
+<p><strong>secondary key nonleaf pages</strong>
+ <img src="/img/innodb_file_manage_post/secondary_key_nonleaf_pages.png" alt="innodb file header/trailer" /></p>
+
+<h2 id="6-数据字典data-dictinary">6. 数据字典Data Dictinary</h2>
+
+<p>该部分未完待续。</p>
+
+
+</div>
+<div id="disqus_thread"></div>
+<script>
+        /**
+        *  RECOMMENDED CONFIGURATION VARIABLES: EDIT AND UNCOMMENT THE SECTION BELOW TO INSERT DYNAMIC VALUES FROM YOUR PLATFORM OR CMS.
+        *  LEARN WHY DEFINING THESE VARIABLES IS IMPORTANT: https://disqus.com/admin/universalcode/#configuration-variables
+        */
+        /*
+        var disqus_config = function () {
+                this.page.url = PAGE_URL;  // Replace PAGE_URL with your page's canonical URL variable
+                this.page.identifier = PAGE_IDENTIFIER; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+        };
+        */
+        (function() {  // DON'T EDIT BELOW THIS LINE
+                var d = document, s = d.createElement('script');
+
+                s.src = '//luckywhu.disqus.com/embed.js';
+
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+        })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">猴子爱吃鱼的Blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>猴子爱吃鱼的Blog</li>
+          <li><a href="mailto:jianyingse@gmail.com">jianyingse@gmail.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/luckywhu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">luckywhu</span></a>
+
+          </li>
+          
+
+          
+          <li>
+            <a href="https://twitter.com/jianyingse"><span class="icon icon--twitter"><svg viewBox="0 0 16 16"><path fill="#828282" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27 c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767 c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206 C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271 c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469 c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/></svg>
+</span><span class="username">jianyingse</span></a>
+
+          </li>
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>A Coder, 一直做数据库
+</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
